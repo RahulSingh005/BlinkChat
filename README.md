@@ -8,7 +8,7 @@
 ![Screenshot (192)](https://github.com/user-attachments/assets/9b17b15d-7e1b-428f-b76b-300f8a996e33)
 ![Screenshot (193)](https://github.com/user-attachments/assets/b0aa58dd-df3f-4b57-b390-709d0dc43ff8)
 
-## Live Link: 
+## Live Link: https://blinkchat-j4lg.onrender.com/login
 
 Currently it is not working, I will update it in future.
 
