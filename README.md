@@ -10,7 +10,6 @@
 
 ## Live Link: https://blinkchat-j4lg.onrender.com/login
 
-Currently it is not working, I will update it in future.
 
 ## Features
 
