@@ -3,13 +3,8 @@
 * A full-stack **Chat Application** built with the **MERN stack** (MongoDB, Express.js, React.js, Node.js) and **Socket.io** for seamless, real-time messaging. 
 * The features includes user authentication, real-time communication, and a fully responsive UI optimized for both desktop and mobile devices.
 
-## UI
-![Screenshot (194)](https://github.com/user-attachments/assets/bf90edc5-bee3-4d34-8b6f-8d7a8ead6612)
-![Screenshot (192)](https://github.com/user-attachments/assets/9b17b15d-7e1b-428f-b76b-300f8a996e33)
-![Screenshot (193)](https://github.com/user-attachments/assets/b0aa58dd-df3f-4b57-b390-709d0dc43ff8)
-
-## Live Link: https://blinkchat-j4lg.onrender.com/login
-
+## User Interface
+![generated-image (2)](https://github.com/user-attachments/assets/efbfe697-76ff-45bc-910a-9578bc80cde2)
 
 ## Features
 
