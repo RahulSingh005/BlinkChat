@@ -6,6 +6,10 @@
 ## User Interface
 ![generated-image (2)](https://github.com/user-attachments/assets/efbfe697-76ff-45bc-910a-9578bc80cde2)
 
+## Example Usage
+- Email: guruji@mail.com
+- Password: guru@123
+
 ## Features
 
 - JWT-based user authentication  
