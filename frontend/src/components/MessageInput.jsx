@@ -39,13 +39,24 @@ const MessageInput = ({ onSend }) => {
     };
   }, [selectedUser, emitTyping]);
 
+  const MAX_IMAGE_MB = 8;
+
   const handleImageChange = (file) => {
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
     }
+    // Full-resolution phone camera photos can be 10-15MB+. Reading one of
+    // those into a base64 string in-memory can freeze or crash the tab on
+    // mid/low-end mobile devices, so we cap it here instead of letting the
+    // browser choke on it silently.
+    if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
+      toast.error(`Image is too large. Please choose one under ${MAX_IMAGE_MB}MB.`);
+      return;
+    }
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result);
+    reader.onerror = () => toast.error("Couldn't read that image, please try another one");
     reader.readAsDataURL(file);
   };
 

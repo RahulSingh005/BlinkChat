@@ -101,13 +101,16 @@
     radial-gradient(at 50% 100%, oklch(var(--a) / 0.14) 0px, transparent 55%);
 }
 
-/* ---- Adjustable font sizing (Settings > Font Size) ---- */
-:root[data-font-size="sm"] { font-size: 14px; }
-:root[data-font-size="md"] { font-size: 16px; }
-:root[data-font-size="lg"] { font-size: 18px; }
-:root[data-font-size="xl"] { font-size: 20px; }
+/* ---- Adjustable font sizing (Settings > Font Size) ----
+   NOTE: data-font-size is set on the app's root <div> in App.jsx, not on
+   <html>, so these must be plain attribute selectors (not :root) or they
+   never match and the setting silently does nothing. */
+[data-font-size="sm"] { font-size: 14px; }
+[data-font-size="md"] { font-size: 16px; }
+[data-font-size="lg"] { font-size: 18px; }
+[data-font-size="xl"] { font-size: 20px; }
 
-:root[data-font-size="sm"] .chat-bubble-text { font-size: 0.8125rem; }
-:root[data-font-size="md"] .chat-bubble-text { font-size: 0.875rem; }
-:root[data-font-size="lg"] .chat-bubble-text { font-size: 1rem; }
-:root[data-font-size="xl"] .chat-bubble-text { font-size: 1.125rem; }
+[data-font-size="sm"] .chat-bubble-text { font-size: 0.8125rem; }
+[data-font-size="md"] .chat-bubble-text { font-size: 0.875rem; }
+[data-font-size="lg"] .chat-bubble-text { font-size: 1rem; }
+[data-font-size="xl"] .chat-bubble-text { font-size: 1.125rem; }

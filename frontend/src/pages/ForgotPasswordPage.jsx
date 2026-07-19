@@ -90,7 +90,7 @@ const ForgotPasswordPage = () => {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-mesh relative overflow-hidden">
+    <div className="min-h-dvh grid lg:grid-cols-2 bg-mesh relative overflow-hidden">
       <div className="absolute -top-24 -left-24 w-72 h-72 bg-primary/20 rounded-full blur-3xl animate-float pointer-events-none" />
       <div className="absolute -bottom-24 -right-16 w-80 h-80 bg-secondary/20 rounded-full blur-3xl animate-float-delayed pointer-events-none" />
 

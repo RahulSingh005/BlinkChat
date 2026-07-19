@@ -52,7 +52,7 @@ const App = () => {
 
   if (isCheckingAuth && !authUser)
     return (
-      <div data-theme={theme} className="flex flex-col items-center justify-center h-screen gap-4 bg-mesh">
+      <div data-theme={theme} className="flex flex-col items-center justify-center h-dvh gap-4 bg-mesh">
         <div className="size-14 rounded-2xl bg-primary/10 flex items-center justify-center">
           <Loader className="size-7 animate-spin text-primary" />
         </div>

@@ -14,7 +14,7 @@ import { LANDING_CHATS, DEMO_AVATARS } from "../constants/avatars";
 
 const LandingPage = () => {
   return (
-    <div className="min-h-screen bg-brand-cream text-neutral overflow-x-hidden">
+    <div className="min-h-dvh bg-brand-cream text-neutral overflow-x-hidden">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-brand-cream/90 backdrop-blur-md border-b border-black/5">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">

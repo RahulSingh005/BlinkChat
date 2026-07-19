@@ -48,7 +48,7 @@ const SignUpPage = () => {
   const strengthBars = { Weak: 1, Medium: 2, Strong: 3 }[passwordStrength] || 0;
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-mesh relative overflow-hidden">
+    <div className="min-h-dvh grid lg:grid-cols-2 bg-mesh relative overflow-hidden">
       <div className="absolute -top-24 -right-24 w-72 h-72 bg-secondary/20 rounded-full blur-3xl animate-float pointer-events-none" />
       <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-primary/20 rounded-full blur-3xl animate-float-delayed pointer-events-none" />
 
