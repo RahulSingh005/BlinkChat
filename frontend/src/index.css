@@ -93,3 +93,21 @@
     radial-gradient(at 80% 10%, oklch(var(--s) / 0.1) 0px, transparent 50%),
     radial-gradient(at 60% 80%, oklch(var(--a) / 0.08) 0px, transparent 50%);
 }
+
+[data-theme="dark"] .bg-mesh {
+  background-image:
+    radial-gradient(at 15% 10%, oklch(var(--p) / 0.22) 0px, transparent 55%),
+    radial-gradient(at 85% 0%, oklch(var(--s) / 0.16) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, oklch(var(--a) / 0.14) 0px, transparent 55%);
+}
+
+/* ---- Adjustable font sizing (Settings > Font Size) ---- */
+:root[data-font-size="sm"] { font-size: 14px; }
+:root[data-font-size="md"] { font-size: 16px; }
+:root[data-font-size="lg"] { font-size: 18px; }
+:root[data-font-size="xl"] { font-size: 20px; }
+
+:root[data-font-size="sm"] .chat-bubble-text { font-size: 0.8125rem; }
+:root[data-font-size="md"] .chat-bubble-text { font-size: 0.875rem; }
+:root[data-font-size="lg"] .chat-bubble-text { font-size: 1rem; }
+:root[data-font-size="xl"] .chat-bubble-text { font-size: 1.125rem; }

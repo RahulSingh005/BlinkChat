@@ -35,6 +35,49 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ---- WebRTC call signaling ----
+    socket.on("call:invite", ({ receiverId, callType, caller, offer }) => {
+        const receiverSocketId = userSocketMap[receiverId];
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("call:incoming", {
+                callerId: userId,
+                callType,
+                caller,
+                offer,
+            });
+        } else {
+            socket.emit("call:unavailable", { receiverId });
+        }
+    });
+
+    socket.on("call:answer", ({ receiverId, answer }) => {
+        const receiverSocketId = userSocketMap[receiverId];
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("call:answered", { answer, calleeId: userId });
+        }
+    });
+
+    socket.on("call:ice-candidate", ({ receiverId, candidate }) => {
+        const receiverSocketId = userSocketMap[receiverId];
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("call:ice-candidate", { candidate, senderId: userId });
+        }
+    });
+
+    socket.on("call:reject", ({ receiverId }) => {
+        const receiverSocketId = userSocketMap[receiverId];
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("call:rejected", { calleeId: userId });
+        }
+    });
+
+    socket.on("call:end", ({ receiverId }) => {
+        const receiverSocketId = userSocketMap[receiverId];
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("call:ended", { senderId: userId });
+        }
+    });
+
     socket.on("disconnect", () => {
         console.log("A user disconnected", socket.id);
         delete userSocketMap[userId];

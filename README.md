@@ -54,7 +54,7 @@ Using GitHub:
 ## Installation
 
 
-### Setup .env file
+### Setup .env file (backend/.env)
 ```bash
 MONGODB_URI=...
 PORT=5001
@@ -65,6 +65,27 @@ CLOUDINARY_API_KEY=...
 CLOUDINARY_API_SECRET=...
 
 NODE_ENV=development
+
+# Google sign-in (Login/Sign up "Continue with Google")
+# Create an OAuth Client ID (type: Web application) at
+# https://console.cloud.google.com/apis/credentials and add your
+# frontend URL (e.g. http://localhost:5173) as an Authorized JavaScript origin.
+GOOGLE_CLIENT_ID=...
+
+# Forgot password OTP emails (optional in development).
+# If left unset, the OTP is printed to the backend console instead of
+# emailed, so you can still test the flow locally without SMTP.
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=...
+EMAIL_PASS=...
+EMAIL_FROM=BlinkChat <no-reply@blinkchat.app>
+```
+
+### Setup .env file (frontend/.env)
+```bash
+# Same Google OAuth Client ID as the backend, exposed to the browser.
+VITE_GOOGLE_CLIENT_ID=...
 ```
 
 Install the project dependencies using npm install

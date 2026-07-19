@@ -103,7 +103,7 @@ const Message = React.memo(({ message, isSender, authUser, selectedUser }) => {
               )}
 
               {message.text && (
-                <div className="break-words whitespace-pre-wrap text-sm leading-relaxed">
+                <div className="chat-bubble-text break-words whitespace-pre-wrap text-sm leading-relaxed">
                   {message.text}
                 </div>
               )}

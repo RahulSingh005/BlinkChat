@@ -2,6 +2,24 @@ import { create } from "zustand";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
+import { useThemeStore } from "./useThemeStore";
+
+const showBrowserNotification = (message, sender) => {
+  if (typeof window === "undefined" || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+  if (document.visibilityState === "visible") return;
+
+  const body = message.image && !message.text ? "📷 Sent a photo" : message.text || "New message";
+  const notif = new Notification(sender?.fullName || "New message", {
+    body,
+    icon: sender?.profilePic || "/avatar.png",
+    tag: `blinkchat-${sender?._id || "msg"}`,
+  });
+  notif.onclick = () => {
+    window.focus();
+    notif.close();
+  };
+};
 
 const getChatPartnerId = (message, authUserId) =>
   message.senderId === authUserId ? message.receiverId : message.senderId;
@@ -116,6 +134,21 @@ export const useChatStore = create((set, get) => ({
           },
         }));
       }
+
+      if (newMessage.senderId !== authUserId) {
+        const { notificationsEnabled, soundEnabled } = useThemeStore.getState();
+        const sender = get().users.find((u) => u._id === newMessage.senderId);
+
+        if (notificationsEnabled) {
+          showBrowserNotification(newMessage, sender);
+        }
+        if (soundEnabled && !isFromSelectedUser) {
+          // subtle in-app toast as a fallback / supplement to native notification
+          toast(`${sender?.fullName || "New message"}: ${
+            newMessage.image && !newMessage.text ? "📷 Photo" : newMessage.text || ""
+          }`, { icon: "💬" });
+        }
+      }
     });
 
     socket.off("userTyping");
@@ -135,5 +168,36 @@ export const useChatStore = create((set, get) => ({
   getTotalUnread: () => {
     const { unreadCounts } = get();
     return Object.values(unreadCounts).reduce((sum, n) => sum + n, 0);
+  },
+
+  clearChatWith: async (userId) => {
+    try {
+      await axiosInstance.delete(`/messages/clear/${userId}`);
+      set((state) => ({
+        messages: state.selectedUser?._id === userId ? [] : state.messages,
+        lastMessages: { ...state.lastMessages, [userId]: null },
+      }));
+      toast.success("Chat cleared");
+      return true;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to clear chat");
+      return false;
+    }
+  },
+
+  toggleBlockUser: async (userId) => {
+    try {
+      const res = await axiosInstance.put(`/messages/block/${userId}`);
+      useAuthStore.setState((state) => ({
+        authUser: state.authUser
+          ? { ...state.authUser, blockedUsers: res.data.blockedUsers }
+          : state.authUser,
+      }));
+      toast.success(res.data.blocked ? "User blocked" : "User unblocked");
+      return res.data.blocked;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update block status");
+      return null;
+    }
   },
 }));

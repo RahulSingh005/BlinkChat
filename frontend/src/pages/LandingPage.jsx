@@ -7,6 +7,8 @@ import {
   Play,
   Send,
   CheckCheck,
+  Zap,
+  ShieldCheck,
 } from "lucide-react";
 import { LANDING_CHATS, DEMO_AVATARS } from "../constants/avatars";
 
@@ -53,22 +55,34 @@ const LandingPage = () => {
         </div>
 
         <div className="max-w-4xl mx-auto text-center relative z-10">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase text-brand-green-dark bg-brand-green/10 px-3 py-1.5 rounded-full mb-6">
+            <Zap className="size-3.5 fill-brand-green-dark" />
+            Delivered in the blink of an eye
+          </span>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight mb-6">
-            Send A Message To A
+            Say it once.
             <br />
-            Colleague Or Friend
+            It's already there.
           </h1>
           <p className="text-neutral/60 text-base sm:text-lg max-w-xl mx-auto mb-8 leading-relaxed">
-            BlinkChat is a dependable, secure, and free messaging app built for
-            real-time conversations — on web and mobile.
+            BlinkChat is the fast, secure way to talk to the people who matter —
+            instant delivery, real presence, zero clutter. Free, forever.
           </p>
-          <Link
-            to="/signup"
-            className="inline-flex items-center gap-2 bg-brand-green hover:bg-brand-green-dark text-white font-semibold px-8 py-4 rounded-full text-lg transition-all shadow-lg hover:shadow-xl hover:scale-105"
-          >
-            <Download className="size-5" />
-            Get Started Free
-          </Link>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              to="/signup"
+              className="inline-flex items-center gap-2 bg-brand-green hover:bg-brand-green-dark text-white font-semibold px-8 py-4 rounded-full text-lg transition-all shadow-lg hover:shadow-xl hover:scale-105"
+            >
+              <Download className="size-5" />
+              Get Started Free
+            </Link>
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-2 text-neutral font-semibold px-8 py-4 rounded-full text-lg border-2 border-neutral/10 hover:border-neutral/20 transition-colors"
+            >
+              I already have an account
+            </Link>
+          </div>
         </div>
 
         {/* Floating UI + Phone Mockup */}
@@ -89,12 +103,15 @@ const LandingPage = () => {
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-card p-3 w-44 animate-float-delayed overflow-hidden">
-              <img
-                src="https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&h=200&fit=crop&crop=face"
-                alt=""
-                className="w-full h-32 object-cover rounded-xl"
-              />
+            <div className="bg-white rounded-2xl shadow-card p-4 w-48 animate-float-delayed">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="size-2 rounded-full bg-brand-green animate-pulse-slow" />
+                <p className="text-xs font-semibold text-neutral/70">Delivered</p>
+              </div>
+              <p className="text-2xl font-extrabold text-brand-green-dark leading-none flex items-baseline gap-1">
+                38<span className="text-sm font-semibold text-neutral/40">ms</span>
+              </p>
+              <p className="text-[11px] text-neutral/40 mt-1">avg. message speed</p>
             </div>
           </div>
 
@@ -148,10 +165,15 @@ const LandingPage = () => {
               </div>
             </div>
 
-            <div className="bg-amber-50 rounded-2xl shadow-card p-4 w-44 text-center animate-float">
-              <Globe className="size-6 text-amber-600 mx-auto mb-2" />
-              <p className="text-2xl font-extrabold text-neutral">2B+</p>
-              <p className="text-xs text-neutral/50">Users worldwide</p>
+            <div className="bg-white rounded-2xl shadow-card p-4 w-44 animate-float">
+              <div className="flex -space-x-2 mb-2">
+                {[DEMO_AVATARS.woman1, DEMO_AVATARS.man2, DEMO_AVATARS.woman3].map((src) => (
+                  <img key={src} src={src} alt="" className="size-7 rounded-full border-2 border-white object-cover" />
+                ))}
+              </div>
+              <p className="text-xs text-neutral/60">
+                <span className="font-semibold text-neutral">3 people</span> are online now
+              </p>
             </div>
 
             <div className="bg-brand-green text-white rounded-2xl rounded-br-sm px-4 py-2.5 shadow-card max-w-[180px] ml-auto animate-float">
@@ -184,22 +206,25 @@ const LandingPage = () => {
       {/* Features */}
       <section id="features" className="py-20 px-4 sm:px-6 bg-white">
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-extrabold text-center mb-4">Why BlinkChat?</h2>
+          <h2 className="text-3xl font-extrabold text-center mb-4">Built to feel instant</h2>
           <p className="text-neutral/60 text-center mb-12 max-w-lg mx-auto">
-            Everything you need for seamless communication, beautifully designed for web and mobile.
+            Every part of BlinkChat is designed around one idea: nothing should
+            slow down a conversation.
           </p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { title: "Real-time Messaging", desc: "Instant delivery with typing indicators and read status.", icon: "💬" },
-              { title: "Image Sharing", desc: "Send photos with drag-and-drop support.", icon: "📷" },
-              { title: "Online Presence", desc: "See who's online and available to chat.", icon: "🟢" },
-              { title: "Secure & Private", desc: "Your conversations are protected and encrypted.", icon: "🔒" },
-              { title: "Cross-platform", desc: "Works on desktop, tablet, and mobile.", icon: "📱" },
-              { title: "Free Forever", desc: "No subscriptions. Chat without limits.", icon: "✨" },
+              { title: "Real-time messaging", desc: "Messages, typing indicators, and read receipts sync the moment they happen.", icon: Zap },
+              { title: "Image sharing", desc: "Drop in a photo and it's on the other end before you let go of the mouse.", icon: Play },
+              { title: "Online presence", desc: "See exactly who's online and free to talk, right from your sidebar.", icon: Globe },
+              { title: "Private by design", desc: "Every conversation is protected end-to-end — yours to read, no one else's.", icon: ShieldCheck },
+              { title: "One app, every device", desc: "Start a chat on desktop, finish it on your phone, without missing a beat.", icon: MessageSquare },
+              { title: "Free, no catch", desc: "No subscriptions, no message limits, no ads. Just chat.", icon: Lock },
             ].map((f) => (
               <div key={f.title} className="p-6 rounded-2xl bg-brand-cream border border-black/5 hover:shadow-card transition-shadow">
-                <span className="text-3xl">{f.icon}</span>
-                <h3 className="font-bold mt-3 mb-1">{f.title}</h3>
+                <div className="size-11 rounded-xl bg-brand-green/10 flex items-center justify-center mb-3">
+                  <f.icon className="size-5 text-brand-green-dark" />
+                </div>
+                <h3 className="font-bold mb-1">{f.title}</h3>
                 <p className="text-sm text-neutral/60">{f.desc}</p>
               </div>
             ))}
@@ -211,7 +236,8 @@ const LandingPage = () => {
       <section className="py-16 px-4 sm:px-6 bg-brand-green text-white text-center">
         <h2 className="text-3xl font-extrabold mb-4">Ready to start chatting?</h2>
         <p className="text-white/80 mb-8 max-w-md mx-auto">
-          Join BlinkChat today and connect with friends, family, and colleagues instantly.
+          Create your account in under a minute and start talking to friends,
+          family, and colleagues right away.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link to="/signup" className="bg-white text-brand-green-dark font-bold px-8 py-3.5 rounded-full hover:bg-white/90 transition-colors">

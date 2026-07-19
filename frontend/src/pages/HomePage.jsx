@@ -7,12 +7,10 @@ const HomePage = () => {
   const { selectedUser } = useChatStore();
 
   return (
-    <main className="min-h-screen bg-mesh flex flex-col">
-      <div className="h-16" aria-hidden="true" />
-
-      <section className="flex-1 flex items-stretch justify-center px-0 sm:px-4 lg:px-6 pb-0 sm:pb-4">
+    <main className="h-full w-full bg-mesh flex flex-col">
+      <section className="flex-1 flex items-stretch justify-center px-0 sm:px-4 lg:px-6 py-0 sm:py-4">
         <div
-          className="w-full max-w-7xl h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)]
+          className="w-full max-w-7xl h-full
             bg-base-100/90 sm:rounded-2xl shadow-2xl shadow-base-content/5
             border border-base-300/60 flex overflow-hidden backdrop-blur-sm"
           aria-label="BlinkChat main content"

@@ -1,3 +1,13 @@
+export function formatDate(isoDate) {
+  if (!isoDate) return "-";
+  const date = new Date(isoDate);
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 export function formatMessageTime(date) {
   return new Date(date).toLocaleTimeString("en-US", {
     hour: "2-digit",

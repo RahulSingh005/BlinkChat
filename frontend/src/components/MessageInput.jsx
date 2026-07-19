@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { Image, Send, Smile, X, Loader2 } from "lucide-react";
+import { Image, Send, Smile, X, Loader2, ShieldOff } from "lucide-react";
 import toast from "react-hot-toast";
 import EmojiPicker from "./EmojiPicker";
 
@@ -13,7 +13,12 @@ const MessageInput = ({ onSend }) => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const { sendMessage, selectedUser, emitTyping } = useChatStore();
+  const { sendMessage, selectedUser, emitTyping, toggleBlockUser } = useChatStore();
+  const { authUser } = useAuthStore();
+
+  const isBlocked = authUser?.blockedUsers?.some(
+    (id) => String(id) === String(selectedUser?._id)
+  );
 
   const handleTyping = useCallback(
     (value) => {
@@ -109,6 +114,21 @@ const MessageInput = ({ onSend }) => {
 
   return (
     <div className="p-3 lg:p-4 border-t border-base-300/80 bg-base-100/95 backdrop-blur-md relative">
+      {isBlocked ? (
+        <div className="flex items-center justify-between gap-3 bg-base-200 rounded-2xl px-4 py-3">
+          <span className="text-sm text-base-content/60 flex items-center gap-2">
+            <ShieldOff className="size-4" /> You've blocked {selectedUser.fullName}.
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline rounded-xl"
+            onClick={() => toggleBlockUser(selectedUser._id)}
+          >
+            Unblock
+          </button>
+        </div>
+      ) : (
+        <>
       {imagePreview && (
         <div className="mb-3 flex items-center gap-2 animate-fade-in">
           <div className="relative group">
@@ -203,6 +223,8 @@ const MessageInput = ({ onSend }) => {
         <div className="absolute inset-2 bg-primary/10 backdrop-blur-sm flex items-center justify-center text-primary font-medium rounded-xl border-2 border-dashed border-primary/40 z-10">
           Drop image to attach
         </div>
+      )}
+      </>
       )}
     </div>
   );

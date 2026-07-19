@@ -11,6 +11,10 @@ export const useAuthStore = create((set, get) => ({
     isLoggingIn: false,
     isUpdatingProfile: false,
     isCheckingAuth: true,
+    isGoogleAuthing: false,
+    isSendingOtp: false,
+    isVerifyingOtp: false,
+    isResettingPassword: false,
     onlineUsers: [],
     socket: null,
 
@@ -80,6 +84,63 @@ export const useAuthStore = create((set, get) => ({
         toast.error(error.response.data.message);
       } finally {
         set({ isUpdatingProfile: false });
+      }
+    },
+
+    googleAuth: async (credential) => {
+      set({ isGoogleAuthing: true });
+      try {
+        const res = await axiosInstance.post("/auth/google", { credential });
+        set({ authUser: res.data });
+        toast.success("Signed in with Google");
+        get().connectSocket();
+        return true;
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Google sign-in failed");
+        return false;
+      } finally {
+        set({ isGoogleAuthing: false });
+      }
+    },
+
+    forgotPassword: async (email) => {
+      set({ isSendingOtp: true });
+      try {
+        const res = await axiosInstance.post("/auth/forgot-password", { email });
+        toast.success(res.data.message || "Verification code sent");
+        return true;
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Couldn't send verification code");
+        return false;
+      } finally {
+        set({ isSendingOtp: false });
+      }
+    },
+
+    verifyResetOtp: async (email, otp) => {
+      set({ isVerifyingOtp: true });
+      try {
+        await axiosInstance.post("/auth/verify-reset-otp", { email, otp });
+        return true;
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Invalid code");
+        return false;
+      } finally {
+        set({ isVerifyingOtp: false });
+      }
+    },
+
+    resetPassword: async (email, newPassword) => {
+      set({ isResettingPassword: true });
+      try {
+        const res = await axiosInstance.post("/auth/reset-password", { email, newPassword });
+        toast.success(res.data.message || "Password reset successfully");
+        return true;
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Couldn't reset password");
+        return false;
+      } finally {
+        set({ isResettingPassword: false });
       }
     },
 

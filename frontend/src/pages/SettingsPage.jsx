@@ -1,18 +1,63 @@
 import { THEMES } from "../constants";
-import { useThemeStore } from "../store/useThemeStore";
-import { Send, CheckCircle, MessageSquare } from "lucide-react";
+import { FONT_SIZES, useThemeStore } from "../store/useThemeStore";
+import { Link } from "react-router-dom";
+import {
+  Send,
+  CheckCircle,
+  MessageSquare,
+  ArrowLeft,
+  Bell,
+  BellOff,
+  Volume2,
+  VolumeX,
+  Type,
+} from "lucide-react";
 
 const PREVIEW_MESSAGES = [
   { id: 1, content: "Hey! How's it going?", isSent: false },
   { id: 2, content: "I'm doing great! Just working on some new features.", isSent: true },
 ];
 
+const FONT_SIZE_LABELS = { sm: "Small", md: "Medium", lg: "Large", xl: "Extra Large" };
+const FONT_SIZE_PREVIEW_CLASS = { sm: "text-xs", md: "text-sm", lg: "text-base", xl: "text-lg" };
+
 const SettingsPage = () => {
-  const { theme, setTheme } = useThemeStore();
+  const {
+    theme,
+    setTheme,
+    fontSize,
+    setFontSize,
+    notificationsEnabled,
+    setNotificationsEnabled,
+    soundEnabled,
+    setSoundEnabled,
+  } = useThemeStore();
+
+  const handleToggleNotifications = async () => {
+    if (!notificationsEnabled) {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          setNotificationsEnabled(false);
+          return;
+        }
+      }
+      setNotificationsEnabled(true);
+    } else {
+      setNotificationsEnabled(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-base-200 via-base-100 to-base-300 pt-20 pb-8">
+    <div className="min-h-full w-full bg-gradient-to-br from-base-200 via-base-100 to-base-300 py-8">
       <div className="container mx-auto px-4 max-w-4xl">
+        <Link
+          to="/chat"
+          className="inline-flex items-center gap-2 text-sm font-medium text-base-content/60 hover:text-primary transition-colors mb-4"
+        >
+          <ArrowLeft className="size-4" /> Back to Dashboard
+        </Link>
+
         {/* Heading */}
         <div className="flex flex-col items-center gap-2 mb-8">
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shadow">
@@ -65,6 +110,95 @@ const SettingsPage = () => {
           </div>
           <div className="mt-4 text-sm text-base-content/70 text-center">
             Current theme: <span className="font-semibold text-primary">{theme.charAt(0).toUpperCase() + theme.slice(1)}</span>
+          </div>
+        </section>
+
+        {/* Font Size Section */}
+        <section className="bg-base-100 rounded-2xl shadow-lg p-6 mb-10">
+          <div className="mb-4 flex items-center gap-2">
+            <Type className="w-5 h-5 text-primary" />
+            <div>
+              <h2 className="text-lg font-semibold">Font Size</h2>
+              <p className="text-sm text-base-content/70">
+                Make text easier to read
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {FONT_SIZES.map((size) => (
+              <button
+                key={size}
+                onClick={() => setFontSize(size)}
+                aria-pressed={fontSize === size}
+                className={`
+                  flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border transition
+                  focus:outline-none focus:ring-2 focus:ring-primary
+                  ${fontSize === size
+                    ? "bg-primary/10 border-primary shadow"
+                    : "bg-base-200/60 border-base-300 hover:bg-primary/5"}
+                `}
+              >
+                <span className={`font-bold ${FONT_SIZE_PREVIEW_CLASS[size]}`}>Aa</span>
+                <span className="text-xs font-medium">{FONT_SIZE_LABELS[size]}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Notifications Section */}
+        <section className="bg-base-100 rounded-2xl shadow-lg p-6 mb-10">
+          <div className="mb-4 flex items-center gap-2">
+            <Bell className="w-5 h-5 text-primary" />
+            <div>
+              <h2 className="text-lg font-semibold">Notifications</h2>
+              <p className="text-sm text-base-content/70">
+                Control how BlinkChat lets you know about new messages
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-base-200/60 border border-base-300">
+              <div className="flex items-center gap-3">
+                {notificationsEnabled ? (
+                  <Bell className="size-4 text-primary" />
+                ) : (
+                  <BellOff className="size-4 text-base-content/40" />
+                )}
+                <div>
+                  <p className="text-sm font-medium">Desktop notifications</p>
+                  <p className="text-xs text-base-content/60">Show a system notification for new messages</p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
+                checked={notificationsEnabled}
+                onChange={handleToggleNotifications}
+                aria-label="Toggle desktop notifications"
+              />
+            </div>
+
+            <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-base-200/60 border border-base-300">
+              <div className="flex items-center gap-3">
+                {soundEnabled ? (
+                  <Volume2 className="size-4 text-primary" />
+                ) : (
+                  <VolumeX className="size-4 text-base-content/40" />
+                )}
+                <div>
+                  <p className="text-sm font-medium">Message alerts</p>
+                  <p className="text-xs text-base-content/60">Show an in-app alert when a new message arrives</p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
+                checked={soundEnabled}
+                onChange={(e) => setSoundEnabled(e.target.checked)}
+                aria-label="Toggle message alerts"
+              />
+            </div>
           </div>
         </section>
 
