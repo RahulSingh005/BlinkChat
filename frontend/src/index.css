@@ -7,6 +7,16 @@
     scrollbar-width: thin;
     scrollbar-color: oklch(var(--b3)) transparent;
   }
+
+  /* Belt-and-braces: on mobile, a single element even 1px wider than the
+     viewport (a long unbroken word/URL, a fixed-width decorative shape,
+     etc.) makes the *entire page* horizontally scrollable, which is far
+     more noticeable/annoying than the offending element itself. Clipping
+     at the root is the standard safety net for this class of bug. */
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
 }
 
 @layer utilities {

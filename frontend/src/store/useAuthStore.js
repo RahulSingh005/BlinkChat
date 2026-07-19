@@ -3,7 +3,14 @@ import { axiosInstance } from "../lib/axios.js";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
 
-const BASE_URL = import.meta.env.MODE === "development" ? "http://localhost:5001" : "/";
+// In production the socket must point at the SAME backend as the REST API
+// (VITE_API_URL), not at "/" — "/" resolves to whatever domain is serving
+// the frontend itself (e.g. your Vercel static site), which has no backend
+// listening on /socket.io and will 404 every request.
+const BASE_URL =
+  import.meta.env.MODE === "development"
+    ? "http://localhost:5001"
+    : import.meta.env.VITE_API_URL.replace(/\/api\/?$/, "");
 
 export const useAuthStore = create((set, get) => ({  
     authUser: null,

@@ -99,7 +99,16 @@ export const login = async (req, res) => {
 
 export const logout = (req, res) => {
   try {
-    res.cookie("jwt", "", { maxAge: 0 });
+    // Must match the attributes used when the cookie was set (SameSite,
+    // Secure), or some browsers treat this as a different cookie and won't
+    // actually clear the original session.
+    const isProd = process.env.NODE_ENV === "production";
+    res.cookie("jwt", "", {
+      maxAge: 0,
+      httpOnly: true,
+      sameSite: isProd ? "None" : "Lax",
+      secure: isProd,
+    });
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
     console.log("Error in logout controller", error.message);
