@@ -128,7 +128,7 @@ const ChatHeader = () => {
               if (callStatus !== "idle") return toast.error("You're already on a call");
               startCall(selectedUser, "voice");
             }}
-            className="btn btn-ghost btn-sm btn-circle hidden sm:flex hover:bg-primary/10 hover:text-primary"
+            className="btn btn-ghost btn-sm btn-circle flex hover:bg-primary/10 hover:text-primary"
             aria-label="Start voice call"
             title="Voice call"
           >
@@ -141,7 +141,7 @@ const ChatHeader = () => {
               if (callStatus !== "idle") return toast.error("You're already on a call");
               startCall(selectedUser, "video");
             }}
-            className="btn btn-ghost btn-sm btn-circle hidden sm:flex hover:bg-primary/10 hover:text-primary"
+            className="btn btn-ghost btn-sm btn-circle flex hover:bg-primary/10 hover:text-primary"
             aria-label="Start video call"
             title="Video call"
           >

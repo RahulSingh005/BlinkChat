@@ -2,10 +2,36 @@ import { create } from "zustand";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
 
+// STUN alone only works when both peers are behind "easy" NATs. On mobile
+// data or many corporate/school networks, STUN can't establish a direct
+// path at all — the call rings and "connects" at the signaling level, but
+// no media ever flows, which looks exactly like "no audio and video".
+// A TURN server relays media when a direct path isn't possible.
+//
+// The openrelay.metered.ca servers below are a free, no-signup public TURN
+// service meant for testing/small projects. They're rate-limited and not
+// meant to carry real production traffic reliably — for a real deployment,
+// get your own TURN credentials (Twilio, Xirsys, metered.ca paid tier, or
+// self-hosted coturn) and swap them in here.
 const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443?transport=tcp",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
   ],
 };
 
@@ -123,9 +149,13 @@ export const useCallStore = create((set, get) => ({
     };
 
     pc.onconnectionstatechange = () => {
-      if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
-        // let explicit end handlers manage state transitions
+      if (pc.connectionState === "failed") {
+        toast.error("Call connection failed — check your network and try again");
+        get().endCall(true);
       }
+      // "disconnected" and "closed" are handled by the explicit end/reject
+      // handlers elsewhere, so we don't act on them here to avoid double
+      // teardown races.
     };
 
     return pc;
