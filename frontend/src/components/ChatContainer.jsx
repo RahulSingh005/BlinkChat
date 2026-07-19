@@ -1,86 +1,137 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { formatMessageTime } from "../lib/utils";
+import {
+  formatMessageTime,
+  getDateSeparatorLabel,
+  shouldShowDateSeparator,
+  getInitials,
+} from "../lib/utils";
 import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
-import { Loader2 } from "lucide-react";
+import DateSeparator from "./DateSeparator";
+import TypingIndicator from "./TypingIndicator";
+import { ChevronDown, Copy, Check, Loader2 } from "lucide-react";
+import toast from "react-hot-toast";
 
 const Message = React.memo(({ message, isSender, authUser, selectedUser }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(!!message.image);
+  const [copied, setCopied] = useState(false);
 
-  const handleImageError = () => {
-    setImageError(true);
-    setImageLoading(false);
+  const handleCopy = async () => {
+    if (!message.text) return;
+    try {
+      await navigator.clipboard.writeText(message.text);
+      setCopied(true);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy");
+    }
   };
 
-  const handleImageLoad = () => {
-    setImageLoading(false);
-  };
+  const avatar = isSender
+    ? authUser?.profilePic
+    : selectedUser?.profilePic;
 
   return (
     <div
-      className={`flex ${isSender ? "justify-end" : "justify-start"} group mb-4`}
+      className={`flex ${isSender ? "justify-end" : "justify-start"} group animate-message-in`}
       role="listitem"
     >
-      <div className={`max-w-[85%] flex gap-2 ${isSender ? "flex-row-reverse" : "flex-row"}`}>
-        <div className="shrink-0">
-          <img
-            src={
-              isSender
-                ? authUser?.profilePic || "/avatar.png"
-                : selectedUser?.profilePic || "/avatar.png"
-            }
-            alt="Profile"
-            className="w-10 h-10 rounded-full border-2 border-base-200 object-cover"
-            aria-hidden="true"
-          />
+      <div
+        className={`max-w-[88%] sm:max-w-[75%] flex gap-2.5 ${
+          isSender ? "flex-row-reverse" : "flex-row"
+        }`}
+      >
+        <div className="shrink-0 self-end mb-1">
+          {avatar ? (
+            <img
+              src={avatar}
+              alt=""
+              className="w-8 h-8 rounded-full ring-2 ring-base-300/50 object-cover"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center text-[10px] font-bold ring-2 ring-base-300/50">
+              {getInitials(
+                isSender ? authUser?.fullName : selectedUser?.fullName
+              )}
+            </div>
+          )}
         </div>
-        <div className={`space-y-1 ${isSender ? "items-end" : "items-start"}`}>
-          <div className="flex items-center gap-2 text-sm text-base-content/60">
-            <span>{isSender ? "You" : selectedUser?.fullName || "User"}</span>
-            <time className="" dateTime={message.createdAt}>
-              {formatMessageTime(message.createdAt)}
-            </time>
-          </div>
 
+        <div className={`space-y-1 ${isSender ? "items-end" : "items-start"}`}>
           <div
-            className={`p-3 rounded-2xl ${
-              isSender
-                ? "bg-primary text-primary-content rounded-br-none"
-                : "bg-base-200 rounded-bl-none"
-            }`}
+            className={`relative group/bubble ${
+              isSender ? "items-end" : "items-start"
+            } flex flex-col`}
           >
-            {message.image && (
-              <div className="relative mb-2 overflow-hidden rounded-lg">
-                {imageLoading && (
-                  <div className="absolute inset-0 bg-base-300/50 flex items-center justify-center">
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                  </div>
-                )}
-                {!imageError ? (
-                  <img
-                    src={message.image}
-                    alt="Attachment"
-                    className="max-w-[240px] sm:max-w-[320px]"
-                    onError={handleImageError}
-                    onLoad={handleImageLoad}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="p-4 bg-error/10 text-error text-sm rounded-lg">
-                    Failed to load image
-                  </div>
-                )}
-              </div>
-            )}
+            <div
+              className={`px-4 py-2.5 shadow-sm ${
+                isSender
+                  ? "bg-gradient-to-br from-primary to-primary/90 text-primary-content rounded-2xl rounded-br-md"
+                  : "bg-base-200/90 text-base-content rounded-2xl rounded-bl-md border border-base-300/50"
+              }`}
+            >
+              {message.image && (
+                <div className="relative mb-2 overflow-hidden rounded-xl -mx-1">
+                  {imageLoading && (
+                    <div className="absolute inset-0 bg-base-300/50 flex items-center justify-center">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    </div>
+                  )}
+                  {!imageError ? (
+                    <img
+                      src={message.image}
+                      alt="Attachment"
+                      className="max-w-[240px] sm:max-w-[300px] rounded-lg"
+                      onError={() => {
+                        setImageError(true);
+                        setImageLoading(false);
+                      }}
+                      onLoad={() => setImageLoading(false)}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="p-3 bg-error/10 text-error text-xs rounded-lg">
+                      Failed to load image
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {message.text && (
+                <div className="break-words whitespace-pre-wrap text-sm leading-relaxed">
+                  {message.text}
+                </div>
+              )}
+            </div>
 
             {message.text && (
-              <div className="break-words whitespace-pre-wrap">{message.text}</div>
+              <button
+                onClick={handleCopy}
+                className={`absolute top-1 ${
+                  isSender ? "left-0 -translate-x-full pr-1" : "right-0 translate-x-full pl-1"
+                } opacity-0 group-hover/bubble:opacity-100 transition-opacity btn btn-ghost btn-xs btn-circle`}
+                aria-label="Copy message"
+              >
+                {copied ? (
+                  <Check className="size-3 text-success" />
+                ) : (
+                  <Copy className="size-3" />
+                )}
+              </button>
             )}
           </div>
+
+          <time
+            className="text-[10px] text-base-content/40 px-1"
+            dateTime={message.createdAt}
+          >
+            {formatMessageTime(message.createdAt)}
+          </time>
         </div>
       </div>
     </div>
@@ -93,8 +144,7 @@ const ChatContainer = () => {
     getMessages,
     isMessagesLoading,
     selectedUser,
-    subscribeToMessages,
-    unsubscribeFromMessages,
+    typingUsers,
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messagesEndRef = useRef(null);
@@ -102,16 +152,13 @@ const ChatContainer = () => {
   const [autoScroll, setAutoScroll] = useState(true);
 
   const scrollToBottom = useCallback((behavior = "smooth") => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior,
-      block: "nearest",
-    });
+    messagesEndRef.current?.scrollIntoView({ behavior, block: "nearest" });
   }, []);
 
   const handleScroll = () => {
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    setAutoScroll(scrollHeight - (scrollTop + clientHeight) < 50);
+    setAutoScroll(scrollHeight - (scrollTop + clientHeight) < 80);
   };
 
   useEffect(() => {
@@ -129,55 +176,71 @@ const ChatContainer = () => {
 
   useEffect(() => {
     if (!selectedUser?._id) return;
-
-    let isMounted = true;
-    const initChat = async () => {
-      await getMessages(selectedUser._id);
-      if (isMounted) subscribeToMessages();
-    };
-
-    initChat();
-    return () => {
-      isMounted = false;
-      unsubscribeFromMessages();
-    };
-  }, [selectedUser?._id, getMessages, subscribeToMessages, unsubscribeFromMessages]);
+    getMessages(selectedUser._id);
+  }, [selectedUser?._id, getMessages]);
 
   const handleSend = () => {
     setTimeout(() => scrollToBottom(), 100);
   };
 
+  const isTyping = typingUsers[selectedUser?._id];
+
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-base-100 to-base-200/30 relative">
       <ChatHeader />
 
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-base-100"
+        className="flex-1 overflow-y-auto px-3 py-4 lg:px-5 space-y-1 scrollbar-thin relative"
+        role="list"
+        aria-label="Messages"
       >
         {isMessagesLoading ? (
           <MessageSkeleton />
+        ) : messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center gap-3 py-12">
+            <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <span className="text-3xl">👋</span>
+            </div>
+            <div>
+              <p className="font-semibold">Say hello to {selectedUser?.fullName}!</p>
+              <p className="text-sm text-base-content/50 mt-1">
+                Send a message to start the conversation
+              </p>
+            </div>
+          </div>
         ) : (
-          messages.map((message) => (
-            <Message
-              key={message._id || message.createdAt}
-              message={message}
-              isSender={message.senderId === authUser?._id}
-              authUser={authUser}
-              selectedUser={selectedUser}
-            />
+          messages.map((message, index) => (
+            <React.Fragment key={message._id || message.createdAt}>
+              {shouldShowDateSeparator(message, messages[index - 1]) && (
+                <DateSeparator
+                  label={getDateSeparatorLabel(message.createdAt)}
+                />
+              )}
+              <Message
+                message={message}
+                isSender={message.senderId === authUser?._id}
+                authUser={authUser}
+                selectedUser={selectedUser}
+              />
+            </React.Fragment>
           ))
         )}
+
+        {isTyping && (
+          <TypingIndicator name={selectedUser?.fullName?.split(" ")[0]} />
+        )}
+
         <div ref={messagesEndRef} aria-hidden="true" />
       </div>
 
       {!autoScroll && (
         <button
           onClick={() => scrollToBottom("smooth")}
-          className="fixed bottom-24 right-8 btn btn-circle btn-primary btn-sm shadow-lg"
+          className="absolute bottom-24 right-5 btn btn-circle btn-primary btn-sm shadow-xl z-20 animate-bounce-subtle"
           aria-label="Scroll to latest message"
         >
-          ↓
+          <ChevronDown className="size-4" />
         </button>
       )}
 

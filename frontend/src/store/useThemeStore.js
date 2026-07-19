@@ -13,10 +13,8 @@ export const useThemeStore = create((set) => ({
   },
   initTheme: () => {
     if (typeof window !== "undefined") {
-      const storedTheme = localStorage.getItem("chat-theme") || "dark";
+      const storedTheme = localStorage.getItem("chat-theme") || "light";
       set({ theme: storedTheme });
-
-      // Optional: apply stored theme on load
       document.documentElement.setAttribute("data-theme", storedTheme);
     }
   },

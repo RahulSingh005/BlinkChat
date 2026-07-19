@@ -1,43 +1,49 @@
 import { Link } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
+import { useChatStore } from "../store/useChatStore";
 import { LogOut, MessageSquare, Settings, User } from "lucide-react";
-
-const getInitials = (name = "") =>
-  name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
+import { getInitials } from "../lib/utils";
 
 const Navbar = () => {
   const { logout, authUser } = useAuthStore();
+  const totalUnread = useChatStore((s) => s.getTotalUnread());
 
   return (
     <header
-      className="bg-base-100 border-b border-base-300 fixed w-full top-0 z-40
-        backdrop-blur-lg bg-base-100/80 shadow-md"
+      className="bg-base-100/80 border-b border-base-300/60 fixed w-full top-0 z-40 backdrop-blur-xl"
       role="navigation"
       aria-label="Main"
     >
       <div className="container mx-auto px-4 h-16">
         <div className="flex items-center justify-between h-full">
-
           <Link
             to="/"
-            className="flex items-center gap-2.5 hover:opacity-80 transition-all"
+            className="flex items-center gap-3 hover:opacity-90 transition-opacity group"
             aria-label="BlinkChat Home"
           >
-            <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center shadow-sm">
-              <MessageSquare className="w-5 h-5 text-primary" />
+            <div className="size-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20 group-hover:shadow-primary/30 transition-shadow">
+              <MessageSquare className="w-5 h-5 text-primary-content" />
             </div>
-            <h1 className="text-lg font-bold tracking-tight">BlinkChat</h1>
+            <div className="flex flex-col">
+              <h1 className="text-lg font-extrabold tracking-tight leading-none">
+                BlinkChat
+              </h1>
+              <span className="text-[10px] text-base-content/40 font-medium hidden sm:block">
+                Connect instantly
+              </span>
+            </div>
           </Link>
 
+          <nav className="flex items-center gap-1.5" aria-label="User actions">
+            {authUser && totalUnread > 0 && (
+              <span className="badge badge-primary badge-sm mr-1 hidden sm:flex">
+                {totalUnread} unread
+              </span>
+            )}
 
-          <nav className="flex items-center gap-2" aria-label="User actions">
             <Link
               to="/settings"
-              className="btn btn-sm gap-2 transition-colors hover:bg-base-200 focus:ring-2 focus:ring-primary"
+              className="btn btn-ghost btn-sm gap-2 rounded-xl"
               aria-label="Settings"
             >
               <Settings className="w-4 h-4" />
@@ -48,30 +54,31 @@ const Navbar = () => {
               <>
                 <Link
                   to="/profile"
-                  className="btn btn-sm gap-2 transition-colors hover:bg-base-200 focus:ring-2 focus:ring-primary"
+                  className="btn btn-ghost btn-sm gap-2 rounded-xl"
                   aria-label="Profile"
                 >
                   {authUser.profilePic ? (
                     <img
                       src={authUser.profilePic}
                       alt={authUser.fullName}
-                      className="size-5 rounded-full object-cover"
+                      className="size-6 rounded-full object-cover ring-2 ring-primary/20"
                     />
                   ) : (
-                    <span className="size-5 rounded-full bg-base-300 flex items-center justify-center font-bold text-xs text-base-content">
+                    <span className="size-6 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center font-bold text-[10px]">
                       {getInitials(authUser.fullName)}
                     </span>
                   )}
-                  <span className="hidden sm:inline">Profile</span>
+                  <span className="hidden sm:inline max-w-[100px] truncate">
+                    {authUser.fullName.split(" ")[0]}
+                  </span>
                 </Link>
 
                 <button
-                  className="btn btn-sm gap-2 bg-transparent hover:bg-error/10 text-error border-none transition-colors focus:ring-2 focus:ring-error"
+                  className="btn btn-ghost btn-sm gap-2 text-error hover:bg-error/10 rounded-xl"
                   onClick={logout}
                   aria-label="Logout"
-                  tabIndex={0}
                 >
-                  <LogOut className="size-5" />
+                  <LogOut className="size-4" />
                   <span className="hidden sm:inline">Logout</span>
                 </button>
               </>

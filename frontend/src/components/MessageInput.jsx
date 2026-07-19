@@ -1,22 +1,44 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
-import { Image, Send, X, Loader2 } from "lucide-react";
+import { useAuthStore } from "../store/useAuthStore";
+import { Image, Send, Smile, X, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
+import EmojiPicker from "./EmojiPicker";
 
-const MessageInput = () => {
+const MessageInput = ({ onSend }) => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef(null);
-  const { sendMessage } = useChatStore();
+  const typingTimeoutRef = useRef(null);
+  const { sendMessage, selectedUser, emitTyping } = useChatStore();
+
+  const handleTyping = useCallback(
+    (value) => {
+      if (!selectedUser) return;
+      emitTyping(selectedUser._id, value.length > 0);
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        emitTyping(selectedUser._id, false);
+      }, 2000);
+    },
+    [selectedUser, emitTyping]
+  );
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(typingTimeoutRef.current);
+      if (selectedUser) emitTyping(selectedUser._id, false);
+    };
+  }, [selectedUser, emitTyping]);
 
   const handleImageChange = (file) => {
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
     }
-    
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result);
     reader.readAsDataURL(file);
@@ -52,13 +74,16 @@ const MessageInput = () => {
 
     try {
       setIsSending(true);
+      emitTyping(selectedUser._id, false);
       await sendMessage({
         text: text.trim(),
         image: imagePreview,
       });
       setText("");
       removeImage();
-    } catch (error) {
+      setShowEmojiPicker(false);
+      onSend?.();
+    } catch {
       toast.error("Failed to send message");
     } finally {
       setIsSending(false);
@@ -72,20 +97,29 @@ const MessageInput = () => {
     }
   };
 
+  const handleTextChange = (e) => {
+    setText(e.target.value);
+    handleTyping(e.target.value);
+  };
+
+  const insertEmoji = (emoji) => {
+    setText((prev) => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
   return (
-    <div className="p-4 w-full border-t border-base-300 bg-base-100">
+    <div className="p-3 lg:p-4 border-t border-base-300/80 bg-base-100/95 backdrop-blur-md relative">
       {imagePreview && (
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2 animate-fade-in">
           <div className="relative group">
             <img
               src={imagePreview}
               alt="Preview"
-              className="w-20 h-20 object-cover rounded-lg border border-base-300 shadow-sm"
+              className="w-20 h-20 object-cover rounded-xl border border-base-300 shadow-md"
             />
             <button
               onClick={removeImage}
-              className="absolute -top-2 -right-2 size-6 rounded-full bg-error text-error-content
-                       flex items-center justify-center shadow hover:bg-error-focus transition-colors"
+              className="absolute -top-2 -right-2 size-6 rounded-full bg-error text-error-content flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
               type="button"
               aria-label="Remove image"
             >
@@ -95,37 +129,51 @@ const MessageInput = () => {
         </div>
       )}
 
-      <form 
+      <form
         onSubmit={handleSendMessage}
-        className={`relative flex items-center gap-2 ${isDragging ? "ring-2 ring-primary" : ""}`}
+        className={`relative flex items-end gap-2 ${isDragging ? "ring-2 ring-primary rounded-xl" : ""}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="flex-1 flex gap-2">
-          <div className="relative flex-1">
+        <div className="relative flex-1">
+          {showEmojiPicker && (
+            <EmojiPicker
+              onSelect={insertEmoji}
+              onClose={() => setShowEmojiPicker(false)}
+            />
+          )}
+
+          <div className="flex items-end gap-1 bg-base-200/60 rounded-2xl border border-base-300/60 px-2 py-1.5 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker((v) => !v)}
+              className="btn btn-ghost btn-sm btn-circle shrink-0 text-base-content/60 hover:text-primary"
+              aria-label="Open emoji picker"
+            >
+              <Smile size={20} />
+            </button>
+
             <textarea
               rows="1"
-              className="textarea textarea-bordered w-full pr-12 resize-none"
+              className="flex-1 bg-transparent border-none outline-none resize-none py-2 px-1 max-h-32 text-sm placeholder:text-base-content/40"
               placeholder="Type a message..."
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={handleTextChange}
               onKeyDown={handleKeyDown}
               aria-label="Message input"
             />
-            
-            <div className="absolute right-2 bottom-2 flex items-center gap-1">
-              <button
-                type="button"
-                className={`btn btn-ghost btn-sm btn-square
-                  ${imagePreview ? "text-primary" : "text-base-content"} 
-                  hover:bg-base-300`}
-                onClick={() => fileInputRef.current?.click()}
-                aria-label="Attach image"
-              >
-                <Image size={20} />
-              </button>
-            </div>
+
+            <button
+              type="button"
+              className={`btn btn-ghost btn-sm btn-circle shrink-0 ${
+                imagePreview ? "text-primary" : "text-base-content/60"
+              }`}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Attach image"
+            >
+              <Image size={20} />
+            </button>
           </div>
         </div>
 
@@ -139,22 +187,21 @@ const MessageInput = () => {
 
         <button
           type="submit"
-          className={`btn btn-circle btn-sm sm:btn-md btn-primary
-            ${!text && !imagePreview ? "btn-disabled" : ""}
-            ${isSending ? "pointer-events-none" : ""}`}
+          disabled={(!text.trim() && !imagePreview) || isSending}
+          className="btn btn-circle btn-primary shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-105 transition-all shrink-0"
           aria-label="Send message"
         >
           {isSending ? (
             <Loader2 className="size-5 animate-spin" />
           ) : (
-            <Send size={20} />
+            <Send size={18} />
           )}
         </button>
       </form>
 
       {isDragging && (
-        <div className="absolute inset-0 bg-primary/10 flex items-center justify-center text-primary rounded-lg">
-          Drop image to upload
+        <div className="absolute inset-2 bg-primary/10 backdrop-blur-sm flex items-center justify-center text-primary font-medium rounded-xl border-2 border-dashed border-primary/40 z-10">
+          Drop image to attach
         </div>
       )}
     </div>

@@ -2,26 +2,94 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(var(--b3)) transparent;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 5px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: oklch(var(--b3));
+    border-radius: 9999px;
+  }
+}
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(16px);}
-  to { opacity: 1; transform: translateY(0);}
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-in {
-  animation: fade-in 0.5s ease;
+  animation: fade-in 0.4s ease-out;
+}
+
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-message-in {
+  animation: message-in 0.25s ease-out;
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+.animate-float-delayed {
+  animation: float 6s ease-in-out 2s infinite;
+}
+
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s ease-in-out infinite;
 }
 
 @keyframes pulse-slow {
-  0%, 100% { opacity: 1 }
-  50% { opacity: 0.8 }
-}
-@keyframes pulse-slower {
-  0%, 100% { opacity: 1 }
-  50% { opacity: 0.6 }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 .animate-pulse-slow {
   animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
-.animate-pulse-slower {
-  animation: pulse-slower 7s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+.typing-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: oklch(var(--bc) / 0.5);
+  animation: typing-bounce 1.4s ease-in-out infinite;
+}
+
+.bg-mesh {
+  background-color: oklch(var(--b2));
+  background-image:
+    radial-gradient(at 20% 20%, oklch(var(--p) / 0.12) 0px, transparent 50%),
+    radial-gradient(at 80% 10%, oklch(var(--s) / 0.1) 0px, transparent 50%),
+    radial-gradient(at 60% 80%, oklch(var(--a) / 0.08) 0px, transparent 50%);
 }

@@ -3,14 +3,18 @@ import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
 
+const getChatPartnerId = (message, authUserId) =>
+  message.senderId === authUserId ? message.receiverId : message.senderId;
 
-export const useChatStore = create((set,get ) => ({
-    messages: [],
-    users: [],
-    selectedUser: null,
-    isUsersLoading: false,
-    isMessagesLoading: false,
-
+export const useChatStore = create((set, get) => ({
+  messages: [],
+  users: [],
+  selectedUser: null,
+  isUsersLoading: false,
+  isMessagesLoading: false,
+  unreadCounts: {},
+  lastMessages: {},
+  typingUsers: {},
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -18,7 +22,7 @@ export const useChatStore = create((set,get ) => ({
       const res = await axiosInstance.get("/messages/users");
       set({ users: res.data });
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to load contacts");
     } finally {
       set({ isUsersLoading: false });
     }
@@ -28,9 +32,17 @@ export const useChatStore = create((set,get ) => ({
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
+      const messages = res.data;
+      set({ messages });
+
+      if (messages.length > 0) {
+        const lastMsg = messages[messages.length - 1];
+        set((state) => ({
+          lastMessages: { ...state.lastMessages, [userId]: lastMsg },
+        }));
+      }
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to load messages");
     } finally {
       set({ isMessagesLoading: false });
     }
@@ -39,34 +51,89 @@ export const useChatStore = create((set,get ) => ({
   sendMessage: async (messageData) => {
     const { selectedUser, messages } = get();
     try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      set({ messages: [...messages, res.data] });
+      const res = await axiosInstance.post(
+        `/messages/send/${selectedUser._id}`,
+        messageData
+      );
+      const newMessage = res.data;
+      set({
+        messages: [...messages, newMessage],
+        lastMessages: {
+          ...get().lastMessages,
+          [selectedUser._id]: newMessage,
+        },
+      });
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to send message");
+      throw error;
     }
   },
 
-  subscribeToMessages: () => {
-    const { selectedUser } = get();
-    if (!selectedUser) return;
+  setSelectedUser: (selectedUser) => {
+    if (selectedUser) {
+      set((state) => ({
+        selectedUser,
+        unreadCounts: { ...state.unreadCounts, [selectedUser._id]: 0 },
+        typingUsers: { ...state.typingUsers, [selectedUser._id]: false },
+      }));
+    } else {
+      set({ selectedUser: null });
+    }
+  },
 
+  emitTyping: (receiverId, isTyping) => {
     const socket = useAuthStore.getState().socket;
+    socket?.emit("typing", { receiverId, isTyping });
+  },
 
+  setupGlobalListeners: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+
+    socket.off("newMessage");
     socket.on("newMessage", (newMessage) => {
-      const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-      if (!isMessageSentFromSelectedUser) return;
+      const { selectedUser } = get();
+      const authUserId = useAuthStore.getState().authUser?._id;
+      if (!authUserId) return;
 
-      set({
-        messages: [...get().messages, newMessage],
-      });
+      const partnerId = getChatPartnerId(newMessage, authUserId);
+
+      set((state) => ({
+        lastMessages: { ...state.lastMessages, [partnerId]: newMessage },
+      }));
+
+      const isFromSelectedUser =
+        selectedUser && newMessage.senderId === selectedUser._id;
+
+      if (isFromSelectedUser) {
+        set({ messages: [...get().messages, newMessage] });
+      } else if (newMessage.senderId !== authUserId) {
+        set((state) => ({
+          unreadCounts: {
+            ...state.unreadCounts,
+            [newMessage.senderId]:
+              (state.unreadCounts[newMessage.senderId] || 0) + 1,
+          },
+        }));
+      }
+    });
+
+    socket.off("userTyping");
+    socket.on("userTyping", ({ senderId, isTyping }) => {
+      set((state) => ({
+        typingUsers: { ...state.typingUsers, [senderId]: isTyping },
+      }));
     });
   },
 
-  unsubscribeFromMessages: () => {
+  teardownGlobalListeners: () => {
     const socket = useAuthStore.getState().socket;
-    socket.off("newMessage");
+    socket?.off("newMessage");
+    socket?.off("userTyping");
   },
 
-  setSelectedUser: (selectedUser) => set({ selectedUser }),
-
-})) 
+  getTotalUnread: () => {
+    const { unreadCounts } = get();
+    return Object.values(unreadCounts).reduce((sum, n) => sum + n, 0);
+  },
+}));

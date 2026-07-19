@@ -1,45 +1,17 @@
-import { Users } from "lucide-react";
 const SidebarSkeleton = () => {
-  // Create 8 skeleton items with varied widths
-  const skeletonContacts = Array(8).fill(null);
-  const nameWidths = [80, 110, 90, 120, 100, 115, 95, 105];
-  const statusWidths = [40, 50, 35, 60, 55, 45, 38, 52];
-
   return (
-    <aside
-      className="h-full w-20 lg:w-72 border-r border-base-300 bg-gray-50 dark:bg-gray-900 
-      flex flex-col transition-all duration-200 shadow-sm"
-    >
-      {/* Header */}
-      <div className="border-b border-base-300 w-full p-5 bg-white dark:bg-gray-950">
-        <div className="flex items-center gap-2">
-          <Users className="w-6 h-6 text-gray-500 dark:text-gray-300" />
-          <span className="font-medium hidden lg:block text-gray-700 dark:text-gray-100">Contacts</span>
-        </div>
+    <aside className="h-full w-20 lg:w-80 border-r border-base-300/80 flex flex-col bg-base-100">
+      <div className="p-5 space-y-3 border-b border-base-300/80">
+        <div className="skeleton h-8 w-32 hidden lg:block" />
+        <div className="skeleton h-9 w-full hidden lg:block rounded-lg" />
       </div>
-
-      {/* Skeleton Contacts */}
-      <div className="overflow-y-auto w-full py-3">
-        {skeletonContacts.map((_, idx) => (
-          <div
-            key={idx}
-            className="w-full px-4 py-3 flex items-center gap-4 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-150"
-          >
-            {/* Avatar skeleton */}
-            <div className="relative mx-auto lg:mx-0">
-              <div className="skeleton-shimmer size-12 rounded-full shadow" />
-            </div>
-
-            {/* User info skeleton - only visible on larger screens */}
-            <div className="hidden lg:block text-left min-w-0 flex-1">
-              <div
-                className="skeleton-shimmer h-4 rounded mb-2"
-                style={{ width: nameWidths[idx % nameWidths.length] }}
-              />
-              <div
-                className="skeleton-shimmer h-3 rounded"
-                style={{ width: statusWidths[idx % statusWidths.length] }}
-              />
+      <div className="p-3 space-y-2 flex-1">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex items-center gap-3 p-3">
+            <div className="skeleton w-12 h-12 rounded-full shrink-0" />
+            <div className="hidden lg:flex flex-col gap-2 flex-1">
+              <div className="skeleton h-4 w-24" />
+              <div className="skeleton h-3 w-36" />
             </div>
           </div>
         ))}
