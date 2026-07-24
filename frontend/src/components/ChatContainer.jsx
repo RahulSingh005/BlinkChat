@@ -15,6 +15,8 @@ import TypingIndicator from "./TypingIndicator";
 import { ChevronDown, Copy, Check, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
+const [previewImage, setPreviewImage] = useState(null);
+
 const Message = React.memo(({ message, isSender, authUser, selectedUser }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(!!message.image);
@@ -86,7 +88,7 @@ const Message = React.memo(({ message, isSender, authUser, selectedUser }) => {
                     <img
                       src={message.image}
                       alt="Attachment"
-                      className="max-w-[240px] sm:max-w-[300px] rounded-lg"
+                      className="className= max-w-[220px] sm:max-w-[260px] max-h-[320px] object-cover rounded-2xl cursor-pointer"
                       onError={() => {
                         setImageError(true);
                         setImageLoading(false);

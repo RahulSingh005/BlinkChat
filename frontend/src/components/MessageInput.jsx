@@ -141,7 +141,7 @@ const MessageInput = ({ onSend }) => {
       ) : (
         <>
       {imagePreview && (
-        <div className="mb-3 flex items-center gap-2 animate-fade-in">
+        <div className="sticky bottom-0 bg-base-100 mb-3 flex items-center gap-2 animate-fade-in">
           <div className="relative group">
             <img
               src={imagePreview}

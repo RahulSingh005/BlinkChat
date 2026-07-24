@@ -7,7 +7,7 @@ const HomePage = () => {
   const { selectedUser } = useChatStore();
 
   return (
-    <main className="h-full w-full bg-mesh flex flex-col">
+    <main className="h-[100dvh] w-full bg-mesh flex flex-col">
       <section className="flex-1 flex items-stretch justify-center px-0 sm:px-4 lg:px-6 py-0 sm:py-4">
         <div
           className="w-full max-w-7xl h-full
