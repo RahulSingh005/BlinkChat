@@ -1,281 +1,441 @@
-import { THEMES } from "../constants";
-import { FONT_SIZES, useThemeStore } from "../store/useThemeStore";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
-  Send,
-  CheckCircle,
-  MessageSquare,
-  ArrowLeft,
+  Ban,
   Bell,
-  BellOff,
+  BellRing,
+  Check,
+  ChevronRight,
+  Clock3,
+  CornerDownLeft,
+  Download,
+  Eye,
+  KeyRound,
+  Languages,
+  LogOut,
+  Monitor,
+  Moon,
+  ShieldCheck,
+  Smartphone,
+  Sparkles,
+  Sun,
+  Trash2,
   Volume2,
-  VolumeX,
-  Type,
 } from "lucide-react";
+import { PasswordField } from "../components/auth/Fields";
+import PageShell, { Card, LinkRow } from "../components/layout/PageShell";
+import Avatar from "../components/ui/Avatar";
+import Sheet from "../components/ui/Sheet";
+import Spinner from "../components/ui/Spinner";
+import Toggle from "../components/ui/Toggle";
+import { api, errorMessage } from "../lib/api";
+import { canInstall, promptInstall, subscribeInstall } from "../lib/install";
+import { isIOS, isStandalone } from "../lib/platform";
+import { enablePush, disablePush, pushStatus } from "../lib/push";
+import { revealThemeChange } from "../lib/transitions";
+import { PUSH_OWNER_KEY, useAuthStore } from "../store/useAuthStore";
+import { storage } from "../lib/storage";
+import { useConfigStore, useFeatures } from "../store/useConfigStore";
+import { ACCENTS, FONT_SIZES, WALLPAPERS, useSettingsStore } from "../store/useSettingsStore";
 
-const PREVIEW_MESSAGES = [
-  { id: 1, content: "Hey! How's it going?", isSent: false },
-  { id: 2, content: "I'm doing great! Just working on some new features.", isSent: true },
-];
+const LANGUAGES = ["en", "hi", "bn", "ta", "te", "mr", "gu", "kn", "ml", "pa", "ur", "es", "fr", "de", "it", "pt", "ru", "ar", "fa", "tr", "id", "ms", "vi", "th", "zh", "ja", "ko", "nl", "pl", "sv", "uk", "sw"];
+const langName = (code) => {
+  try {
+    return new Intl.DisplayNames([navigator.language || "en"], { type: "language" }).of(code) || code;
+  } catch {
+    return code;
+  }
+};
 
-const FONT_SIZE_LABELS = { sm: "Small", md: "Medium", lg: "Large", xl: "Extra Large" };
-const FONT_SIZE_PREVIEW_CLASS = { sm: "text-xs", md: "text-sm", lg: "text-base", xl: "text-lg" };
+function Segmented({ options, value, onChange }) {
+  return (
+    <div className="flex rounded-xl bg-base-200 p-1">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={(e) => onChange(o.value, e)}
+          aria-pressed={value === o.value}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[0.8125rem] font-medium transition ${
+            value === o.value ? "bg-base-100 text-base-content shadow-sm" : "text-base-content/60 hover:text-base-content"
+          }`}
+        >
+          {o.icon && <o.icon className="size-4" />}
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
-const SettingsPage = () => {
-  const {
-    theme,
-    setTheme,
-    fontSize,
-    setFontSize,
-    notificationsEnabled,
-    setNotificationsEnabled,
-    soundEnabled,
-    setSoundEnabled,
-  } = useThemeStore();
+function PushRow() {
+  const vapid = useConfigStore((s) => s.config?.vapidPublicKey);
+  const features = useFeatures();
+  const me = useAuthStore((s) => s.authUser);
+  const [status, setStatus] = useState("loading");
+  const [busy, setBusy] = useState(false);
 
-  const handleToggleNotifications = async () => {
-    if (!notificationsEnabled) {
-      if (typeof window !== "undefined" && "Notification" in window) {
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") {
-          setNotificationsEnabled(false);
-          return;
-        }
+  useEffect(() => {
+    pushStatus().then(setStatus);
+  }, []);
+
+  if (!features.push) return null;
+  const unsupported = status === "unsupported";
+  const iosHint = isIOS && !isStandalone();
+
+  const toggle = async (on) => {
+    setBusy(true);
+    try {
+      if (on) {
+        await enablePush(vapid);
+        storage.set(PUSH_OWNER_KEY, me._id);
+        toast.success("Push notifications on");
+      } else {
+        await disablePush();
+        storage.remove(PUSH_OWNER_KEY);
       }
-      setNotificationsEnabled(true);
-    } else {
-      setNotificationsEnabled(false);
+    } catch (err) {
+      toast.error(err.message || "Couldn't change notifications");
+    } finally {
+      setStatus(await pushStatus());
+      setBusy(false);
     }
   };
 
   return (
-    <div className="min-h-full w-full bg-gradient-to-br from-base-200 via-base-100 to-base-300 py-8">
-      <div className="container mx-auto px-4 max-w-4xl">
-        <Link
-          to="/chat"
-          className="inline-flex items-center gap-2 text-sm font-medium text-base-content/60 hover:text-primary transition-colors mb-4"
-        >
-          <ArrowLeft className="size-4" /> Back to Dashboard
-        </Link>
-
-        {/* Heading */}
-        <div className="flex flex-col items-center gap-2 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shadow">
-            <MessageSquare className="w-6 h-6 text-primary" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">BlinkChat Settings</h1>
-          <p className="text-base-content/70 text-sm">
-            Personalize your chat experience
-          </p>
-        </div>
-
-        {/* Theme Section */}
-        <section className="bg-base-100 rounded-2xl shadow-lg p-6 mb-10">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold">Theme</h2>
-            <p className="text-sm text-base-content/70">
-              Choose a theme for your chat interface
-            </p>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-            {THEMES.map((t) => (
-              <button
-                key={t}
-                className={`
-                  group flex flex-col items-center gap-2 p-3 rounded-xl border transition
-                  focus:outline-none focus:ring-2 focus:ring-primary
-                  ${theme === t ? "bg-primary/10 border-primary shadow" : "bg-base-200/60 border-base-300 hover:bg-primary/5"}
-                `}
-                aria-label={`Switch to ${t} theme`}
-                aria-pressed={theme === t}
-                tabIndex={0}
-                onClick={() => setTheme(t)}
-              >
-                <div className="relative h-8 w-full rounded-md overflow-hidden" data-theme={t}>
-                  <div className="absolute inset-0 grid grid-cols-4 gap-px p-1">
-                    <div className="rounded bg-primary"></div>
-                    <div className="rounded bg-secondary"></div>
-                    <div className="rounded bg-accent"></div>
-                    <div className="rounded bg-neutral"></div>
-                  </div>
-                  {theme === t && (
-                    <CheckCircle className="absolute -top-2 -right-2 w-5 h-5 text-primary drop-shadow" />
-                  )}
-                </div>
-                <span className="text-xs font-medium truncate w-full text-center">
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 text-sm text-base-content/70 text-center">
-            Current theme: <span className="font-semibold text-primary">{theme.charAt(0).toUpperCase() + theme.slice(1)}</span>
-          </div>
-        </section>
-
-        {/* Font Size Section */}
-        <section className="bg-base-100 rounded-2xl shadow-lg p-6 mb-10">
-          <div className="mb-4 flex items-center gap-2">
-            <Type className="w-5 h-5 text-primary" />
-            <div>
-              <h2 className="text-lg font-semibold">Font Size</h2>
-              <p className="text-sm text-base-content/70">
-                Make text easier to read
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {FONT_SIZES.map((size) => (
-              <button
-                key={size}
-                onClick={() => setFontSize(size)}
-                aria-pressed={fontSize === size}
-                className={`
-                  flex flex-col items-center justify-center gap-1.5 py-4 rounded-xl border transition
-                  focus:outline-none focus:ring-2 focus:ring-primary
-                  ${fontSize === size
-                    ? "bg-primary/10 border-primary shadow"
-                    : "bg-base-200/60 border-base-300 hover:bg-primary/5"}
-                `}
-              >
-                <span className={`font-bold ${FONT_SIZE_PREVIEW_CLASS[size]}`}>Aa</span>
-                <span className="text-xs font-medium">{FONT_SIZE_LABELS[size]}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Notifications Section */}
-        <section className="bg-base-100 rounded-2xl shadow-lg p-6 mb-10">
-          <div className="mb-4 flex items-center gap-2">
-            <Bell className="w-5 h-5 text-primary" />
-            <div>
-              <h2 className="text-lg font-semibold">Notifications</h2>
-              <p className="text-sm text-base-content/70">
-                Control how BlinkChat lets you know about new messages
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-base-200/60 border border-base-300">
-              <div className="flex items-center gap-3">
-                {notificationsEnabled ? (
-                  <Bell className="size-4 text-primary" />
-                ) : (
-                  <BellOff className="size-4 text-base-content/40" />
-                )}
-                <div>
-                  <p className="text-sm font-medium">Desktop notifications</p>
-                  <p className="text-xs text-base-content/60">Show a system notification for new messages</p>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                className="toggle toggle-primary"
-                checked={notificationsEnabled}
-                onChange={handleToggleNotifications}
-                aria-label="Toggle desktop notifications"
-              />
-            </div>
-
-            <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-base-200/60 border border-base-300">
-              <div className="flex items-center gap-3">
-                {soundEnabled ? (
-                  <Volume2 className="size-4 text-primary" />
-                ) : (
-                  <VolumeX className="size-4 text-base-content/40" />
-                )}
-                <div>
-                  <p className="text-sm font-medium">Message alerts</p>
-                  <p className="text-xs text-base-content/60">Show an in-app alert when a new message arrives</p>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                className="toggle toggle-primary"
-                checked={soundEnabled}
-                onChange={(e) => setSoundEnabled(e.target.checked)}
-                aria-label="Toggle message alerts"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Preview Section */}
-        <section>
-          <h3 className="text-lg font-semibold mb-3">Preview</h3>
-          <div
-            key={theme} // triggers animation on theme change
-            data-theme={theme}
-            className="rounded-2xl border border-base-300 overflow-hidden bg-base-100 shadow-lg transition-all duration-300 animate-fade-in"
-            aria-label="Theme preview"
+    <div>
+      <Toggle
+        icon={BellRing}
+        label="Push notifications"
+        description={
+          unsupported
+            ? iosHint
+              ? "On iPhone, add BlinkChat to your Home Screen first (Share → Add to Home Screen)."
+              : "This browser doesn't support push notifications."
+            : status === "denied"
+              ? "Blocked in your browser settings. Allow notifications for this site to turn them on."
+              : "Get notified about messages, calls and reminders even when BlinkChat is closed."
+        }
+        checked={status === "enabled"}
+        disabled={busy || unsupported || status === "denied" || status === "loading"}
+        onChange={toggle}
+      />
+      {status === "enabled" && (
+        <div className="-mt-1 px-4 pb-3 pl-16">
+          <button
+            type="button"
+            className="text-xs font-semibold text-primary hover:underline"
+            onClick={() =>
+              api
+                .post("/push/test")
+                .then((r) => toast(r.data.delivered ? "Test notification sent" : "No device received it — try re-enabling"))
+                .catch((err) => toast.error(errorMessage(err)))
+            }
           >
-            <div className="p-4 bg-base-200">
-              <div className="max-w-lg mx-auto">
-                <div className="bg-base-100 rounded-xl shadow-sm overflow-hidden">
-                  {/* Chat Header */}
-                  <div className="px-4 py-3 border-b border-base-300 bg-base-100 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-content font-medium">
-                      J
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-sm">John Doe</h3>
-                      <p className="text-xs text-base-content/70">Online</p>
-                    </div>
-                  </div>
-
-                  {/* Chat Messages */}
-                  <div className="p-4 space-y-4 min-h-[200px] max-h-[200px] overflow-y-auto bg-base-100">
-                    {PREVIEW_MESSAGES.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`flex ${message.isSent ? "justify-end" : "justify-start"}`}
-                      >
-                        <div
-                          className={`
-                            max-w-[80%] rounded-xl p-3 shadow-sm
-                            ${message.isSent ? "bg-primary text-primary-content" : "bg-base-200"}
-                          `}
-                        >
-                          <p className="text-sm">{message.content}</p>
-                          <p
-                            className={`
-                              text-[10px] mt-1.5
-                              ${message.isSent ? "text-primary-content/70" : "text-base-content/70"}
-                            `}
-                          >
-                            12:00 PM
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Chat Input */}
-                  <div className="p-4 border-t border-base-300 bg-base-100">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        className="input input-bordered flex-1 text-sm h-10"
-                        placeholder="Type a message..."
-                        value="This is a preview"
-                        readOnly
-                        aria-readonly="true"
-                      />
-                      <button className="btn btn-primary h-10 min-h-0" tabIndex={-1} aria-disabled>
-                        <Send size={18} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
+            Send a test notification
+          </button>
+        </div>
+      )}
     </div>
   );
-};
+}
 
-export default SettingsPage;
+function BlockedSheet({ open, onClose }) {
+  const [users, setUsers] = useState(null);
+  useEffect(() => {
+    if (!open) return;
+    setUsers(null);
+    api
+      .get("/users/blocked")
+      .then((r) => setUsers(r.data.users))
+      .catch(() => setUsers([]));
+  }, [open]);
+
+  const unblock = async (u) => {
+    try {
+      const res = await api.put(`/users/${u._id}/block`);
+      useAuthStore.getState().setUser({ blockedUsers: res.data.blockedUsers });
+      setUsers((list) => list.filter((x) => x._id !== u._id));
+      toast.success(`Unblocked ${u.fullName}`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Blocked contacts" description="Blocked people can't message or call you, or see your photo, status and online presence." size="sm">
+      {users === null ? (
+        <div className="flex justify-center py-8">
+          <Spinner className="size-5 text-base-content/40" />
+        </div>
+      ) : users.length === 0 ? (
+        <p className="py-8 text-center text-sm text-base-content/50">You haven't blocked anyone.</p>
+      ) : (
+        <ul className="-mx-2">
+          {users.map((u) => (
+            <li key={u._id} className="flex items-center gap-3 rounded-xl px-2 py-2">
+              <Avatar src={u.profilePic} name={u.fullName} seed={u._id} size={40} />
+              <span className="min-w-0 flex-1 truncate font-medium">{u.fullName}</span>
+              <button type="button" className="btn btn-sm rounded-lg" onClick={() => unblock(u)}>
+                Unblock
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Sheet>
+  );
+}
+
+function PasswordSheet({ open, onClose }) {
+  const me = useAuthStore((s) => s.authUser);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (next.length < 6) return toast.error("Use at least 6 characters");
+    setBusy(true);
+    try {
+      await useAuthStore.getState().changePassword({ currentPassword: me.hasPassword ? current : undefined, newPassword: next });
+      toast.success("Password updated. Other devices were signed out.");
+      setCurrent("");
+      setNext("");
+      onClose();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title={me.hasPassword ? "Change password" : "Set a password"} description={me.hasPassword ? "You'll stay signed in here; other devices will be signed out." : "Add a password so you can also sign in with your email."} size="sm">
+      <form onSubmit={save} className="space-y-4 pt-1">
+        {me.hasPassword && <PasswordField id="current-password" label="Current password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />}
+        <PasswordField id="next-password" label="New password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
+        <button type="submit" className="btn btn-primary h-11 min-h-0 w-full rounded-xl" disabled={busy || !next || (me.hasPassword && !current)}>
+          {busy ? <Spinner className="size-4" /> : "Save password"}
+        </button>
+      </form>
+    </Sheet>
+  );
+}
+
+function DeleteAccountSheet({ open, onClose }) {
+  const me = useAuthStore((s) => s.authUser);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [wipe, setWipe] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const remove = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await useAuthStore.getState().deleteAccount({ password, deleteMessages: wipe });
+      toast("Your account was deleted.");
+    } catch (err) {
+      toast.error(errorMessage(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Delete your account" description="This permanently removes your profile, reminders, scheduled messages and group memberships. It can't be undone." size="sm">
+      <form onSubmit={remove} className="space-y-4 pt-1">
+        {me.hasPassword && <PasswordField id="delete-password" label="Your password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-base-200/60 px-3 py-2.5 text-sm">
+          <input type="checkbox" className="checkbox checkbox-sm mt-0.5" checked={wipe} onChange={(e) => setWipe(e.target.checked)} />
+          <span>Also delete every message I've sent (otherwise others keep their copy, shown as “Deleted account”).</span>
+        </label>
+        <div>
+          <label htmlFor="confirm-delete" className="field-label">
+            Type DELETE to confirm
+          </label>
+          <input id="confirm-delete" className="field" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
+        </div>
+        <button type="submit" className="btn btn-error h-11 min-h-0 w-full rounded-xl" disabled={busy || confirm !== "DELETE" || (me.hasPassword && !password)}>
+          {busy ? <Spinner className="size-4" /> : "Delete account forever"}
+        </button>
+      </form>
+    </Sheet>
+  );
+}
+
+export default function SettingsPage() {
+  const me = useAuthStore((s) => s.authUser);
+  const settings = useSettingsStore();
+  const features = useFeatures();
+  const installable = useSyncExternalStore(subscribeInstall, canInstall, () => false);
+  const [sheet, setSheet] = useState(null);
+
+  const saveServer = async (patch) => {
+    try {
+      await useAuthStore.getState().updateProfile({ settings: patch });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  const setTheme = (theme, e) =>
+    revealThemeChange(() => useSettingsStore.getState().update({ theme }), e?.clientX, e?.clientY);
+
+  const signOutEverywhere = async () => {
+    await useAuthStore.getState().logout({ everywhere: true });
+    toast("Signed out of all devices");
+  };
+
+  return (
+    <PageShell title="Settings" subtitle="Make BlinkChat yours">
+      <Link to="/profile" className="flex items-center gap-3 rounded-2xl border border-base-300/70 bg-base-100 p-3.5 transition hover:bg-base-content/[0.02]">
+        <Avatar src={me.profilePic} name={me.fullName} seed={me._id} size={52} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">{me.fullName}</span>
+          <span className="block truncate text-sm text-base-content/55">{me.status?.text ? `${me.status.emoji} ${me.status.text}` : me.about || me.email}</span>
+        </span>
+        <ChevronRight className="size-5 text-base-content/30" />
+      </Link>
+
+      <Card title="Appearance">
+        <div className="space-y-4 p-4">
+          <div>
+            <p className="mb-2 text-sm font-medium">Theme</p>
+            <Segmented
+              value={settings.theme}
+              onChange={setTheme}
+              options={[
+                { value: "light", label: "Light", icon: Sun },
+                { value: "dark", label: "Dark", icon: Moon },
+                { value: "system", label: "System", icon: Monitor },
+              ]}
+            />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">Accent color</p>
+            <div className="flex flex-wrap gap-2.5">
+              {Object.entries(ACCENTS).map(([key, a]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => settings.update({ accent: key })}
+                  className={`flex size-10 items-center justify-center rounded-full transition hover:scale-105 ${settings.accent === key ? "ring-2 ring-base-content/70 ring-offset-2 ring-offset-base-100" : ""}`}
+                  style={{ background: a.swatch }}
+                  aria-label={`${a.label} accent`}
+                  aria-pressed={settings.accent === key}
+                >
+                  {settings.accent === key && <Check className="size-4 text-white" strokeWidth={3} />}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">Text size</p>
+            <Segmented value={settings.fontSize} onChange={(v) => settings.update({ fontSize: v })} options={Object.entries(FONT_SIZES).map(([value, label]) => ({ value, label: label === "Extra large" ? "XL" : label }))} />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">Chat wallpaper</p>
+            <div className="grid grid-cols-3 gap-2.5">
+              {Object.entries(WALLPAPERS).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => settings.update({ wallpaper: key })}
+                  className={`overflow-hidden rounded-xl border-2 text-left transition ${settings.wallpaper === key ? "border-primary" : "border-transparent hover:border-base-300"}`}
+                  aria-pressed={settings.wallpaper === key}
+                >
+                  <div className={`wallpaper-${key} flex h-16 flex-col justify-end gap-1 p-2`}>
+                    <span className="h-2.5 w-3/5 rounded-full bg-bubble-in shadow-sm" />
+                    <span className="ml-auto h-2.5 w-1/2 rounded-full bg-primary" />
+                  </div>
+                  <span className="block bg-base-200/60 px-2 py-1.5 text-xs font-medium">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Chats">
+        <Toggle icon={CornerDownLeft} label="Enter to send" description="Use Shift+Enter for a new line. Turn off to send with the button only." checked={settings.enterToSend} onChange={(v) => settings.update({ enterToSend: v })} />
+        {features.ai?.enabled && (
+          <>
+            <Toggle icon={Sparkles} label="Reply suggestions" description="Show a “Suggest replies” option under new messages." checked={settings.smartReplies} onChange={(v) => settings.update({ smartReplies: v })} />
+            <label className="flex items-center gap-3 px-4 py-3.5">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-base-200 text-base-content/70">
+                <Languages className="size-[18px]" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[0.95rem] font-medium">Translate messages into</span>
+                <span className="mt-0.5 block text-[0.8125rem] text-base-content/55">Used by Translate and auto-translate.</span>
+              </span>
+              <select className="select select-bordered select-sm rounded-lg" value={me.settings?.language || "en"} onChange={(e) => saveServer({ language: e.target.value })}>
+                {LANGUAGES.map((code) => (
+                  <option key={code} value={code}>
+                    {langName(code)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+      </Card>
+
+      <Card title="Notifications">
+        <PushRow />
+        <Toggle icon={Volume2} label="Sounds" description="Play a sound for new messages and reminders." checked={settings.sounds} onChange={(v) => settings.update({ sounds: v })} />
+        <Toggle icon={Eye} label="Show message previews" description="Include message text in notifications." checked={me.settings?.notificationPreviews !== false} onChange={(v) => saveServer({ notificationPreviews: v })} />
+        <Toggle
+          icon={Bell}
+          label="Desktop alerts"
+          description="Show a system alert when BlinkChat is open in a background tab."
+          checked={settings.desktopNotifications}
+          onChange={async (v) => {
+            if (v && "Notification" in window && Notification.permission === "default") await Notification.requestPermission();
+            settings.update({ desktopNotifications: v });
+          }}
+        />
+      </Card>
+
+      <Card title="Privacy" description="If you hide something, you won't see it for others either.">
+        <Toggle icon={Eye} label="Last seen & online" description="Let contacts see when you're online and when you were last active." checked={me.settings?.showLastSeen !== false} onChange={(v) => saveServer({ showLastSeen: v })} />
+        <Toggle icon={ShieldCheck} label="Read receipts" description="Let people know when you've read their messages." checked={me.settings?.readReceipts !== false} onChange={(v) => saveServer({ readReceipts: v })} />
+        <Toggle icon={Clock3} label="Share my local time" description="Show contacts your local time so they can message at a good moment." checked={me.settings?.shareLocalTime !== false} onChange={(v) => saveServer({ shareLocalTime: v })} />
+        <LinkRow icon={Ban} label="Blocked contacts" onClick={() => setSheet("blocked")} right={<ChevronRight className="size-5 text-base-content/30" />} />
+      </Card>
+
+      <Card title="Account">
+        <LinkRow icon={KeyRound} label={me.hasPassword ? "Change password" : "Set a password"} description={me.authProvider === "google" ? "You signed up with Google" : me.email} onClick={() => setSheet("password")} right={<ChevronRight className="size-5 text-base-content/30" />} />
+        <LinkRow icon={Smartphone} label="Log out of all devices" description="Ends every session, including this one." onClick={signOutEverywhere} />
+        <LinkRow icon={LogOut} label="Sign out" onClick={() => useAuthStore.getState().logout()} />
+        <LinkRow icon={Trash2} label="Delete account" danger onClick={() => setSheet("delete")} />
+      </Card>
+
+      <Card title="About">
+        {installable && !isStandalone() && (
+          <LinkRow icon={Download} label="Install BlinkChat" description="Open it like an app, with its own icon and window." onClick={() => promptInstall()} />
+        )}
+        {isIOS && !isStandalone() && !installable && (
+          <LinkRow icon={Download} label="Add to Home Screen" description="In Safari, tap Share → Add to Home Screen for the app experience and notifications." onClick={() => {}} />
+        )}
+        <div className="flex items-center justify-between px-4 py-3.5 text-sm text-base-content/55">
+          <span>BlinkChat 2.0</span>
+          <span className="flex gap-4">
+            <Link to="/privacy" className="hover:text-base-content">
+              Privacy
+            </Link>
+            <Link to="/terms" className="hover:text-base-content">
+              Terms
+            </Link>
+          </span>
+        </div>
+      </Card>
+
+      <BlockedSheet open={sheet === "blocked"} onClose={() => setSheet(null)} />
+      <PasswordSheet open={sheet === "password"} onClose={() => setSheet(null)} />
+      <DeleteAccountSheet open={sheet === "delete"} onClose={() => setSheet(null)} />
+    </PageShell>
+  );
+}

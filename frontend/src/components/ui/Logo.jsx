@@ -1,0 +1,32 @@
+/**
+ * BlinkChat mark. `animated` makes the bolt "blink" — used for the boot
+ * screen instead of a generic spinner.
+ */
+export function LogoMark({ size = 36, animated = false, className = "" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="bc-logo-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#3B5BFD" />
+          <stop offset="1" stopColor="#0EA5E9" />
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="16" fill="url(#bc-logo-bg)" />
+      <path
+        d="M15 23c0-4.4 3.6-8 8-8h18c4.4 0 8 3.6 8 8v11c0 4.4-3.6 8-8 8H29.5l-7.3 5.9c-1.1.9-2.7.1-2.7-1.3v-5.3C16.9 40.2 15 37.3 15 34V23z"
+        fill="#fff"
+      />
+      <path className={animated ? "blink-bolt" : ""} d="M34.8 18.6 25.4 30.4h6.1l-2.3 8.8 9.6-12.3h-6.2l2.2-8.3z" fill="#3B5BFD" />
+      <circle cx="50.5" cy="13.5" r="3.2" fill="#fff" opacity=".85" />
+    </svg>
+  );
+}
+
+export default function Logo({ size = 32, withText = true, className = "" }) {
+  return (
+    <span className={`inline-flex items-center gap-2.5 ${className}`}>
+      <LogoMark size={size} />
+      {withText && <span className="text-[1.05rem] font-bold tracking-tight">BlinkChat</span>}
+    </span>
+  );
+}

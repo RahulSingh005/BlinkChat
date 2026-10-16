@@ -1,342 +1,311 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useRef, useState } from "react";
+import toast from "react-hot-toast";
+import { Camera, Check, Clock3, Mail, Pencil, Phone, RefreshCw, Target, Trash2, X } from "lucide-react";
+import PageShell, { Card } from "../components/layout/PageShell";
+import Avatar from "../components/ui/Avatar";
+import Spinner from "../components/ui/Spinner";
+import Toggle from "../components/ui/Toggle";
+import { errorMessage } from "../lib/api";
+import { formatLongDate, formatUntil } from "../lib/format";
+import { cropSquare } from "../lib/media";
+import { storage } from "../lib/storage";
+import { myTimezone, nextWallTime, timeIn, zoneCity } from "../lib/time";
+import { uploadFile } from "../lib/upload";
 import { useAuthStore } from "../store/useAuthStore";
-import { formatDate } from "../lib/utils";
-import {
-  ArrowLeft,
-  Camera,
-  Mail,
-  User,
-  Loader2,
-  CheckCircle2,
-  Phone,
-  MessageCircle,
-  Pencil,
-  Trash2,
-  X,
-} from "lucide-react";
 
-const ABOUT_PRESETS = [
-  "Hey there! I am using BlinkChat.",
-  "Available",
-  "Busy",
-  "At work",
-  "Sleeping",
-  "Urgent calls only",
+const ABOUT_PRESETS = ["Available", "Busy", "At work", "At the gym", "Battery about to die", "Can't talk, message only", "In a meeting", "Sleeping", "Urgent calls only"];
+const STATUS_PRESETS = [
+  { emoji: "📅", text: "In a meeting" },
+  { emoji: "🚌", text: "Commuting" },
+  { emoji: "🤒", text: "Out sick" },
+  { emoji: "🌴", text: "On vacation" },
+  { emoji: "🏠", text: "Working remotely" },
+  { emoji: "🎧", text: "Heads down" },
+];
+const CLEAR_AFTER = [
+  { id: "30m", label: "30 minutes", at: () => new Date(Date.now() + 30 * 60000) },
+  { id: "1h", label: "1 hour", at: () => new Date(Date.now() + 60 * 60000) },
+  { id: "4h", label: "4 hours", at: () => new Date(Date.now() + 4 * 3600000) },
+  { id: "today", label: "Today", at: () => nextWallTime(myTimezone(), 23, 59) },
+  { id: "week", label: "This week", at: () => new Date(Date.now() + 7 * 86400000) },
+  { id: "never", label: "Don't clear", at: () => null },
+];
+const FOCUS_FOR = [
+  { label: "30 min", at: () => new Date(Date.now() + 30 * 60000) },
+  { label: "1 hour", at: () => new Date(Date.now() + 60 * 60000) },
+  { label: "2 hours", at: () => new Date(Date.now() + 2 * 3600000) },
+  { label: "Until tomorrow", at: () => nextWallTime(myTimezone(), 8, 0) },
 ];
 
-const EditableField = ({
-  icon: Icon,
-  label,
-  value,
-  placeholder,
-  maxLength,
-  onSave,
-  saving,
-}) => {
+function EditableRow({ icon: Icon, label, value, placeholder, maxLength, onSave, presets, inputMode }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
+  const [busy, setBusy] = useState(false);
 
-  const handleSave = async () => {
-    if (draft.trim() !== (value || "")) {
-      await onSave(draft.trim());
+  const save = async (next = draft) => {
+    if (next.trim() === (value || "")) return setEditing(false);
+    setBusy(true);
+    try {
+      await onSave(next.trim());
+      setEditing(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
     }
-    setEditing(false);
   };
 
   return (
-    <div className="space-y-1.5">
-      <div className="text-sm text-base-content/60 flex items-center gap-2">
-        <Icon className="w-4 h-4" />
-        {label}
-        {!editing && (
+    <div className="px-4 py-3.5">
+      <div className="flex items-center gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-base-200 text-base-content/70">
+          <Icon className="size-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-base-content/50">{label}</p>
+          {editing ? (
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              maxLength={maxLength}
+              inputMode={inputMode}
+              placeholder={placeholder}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") save();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              className="mt-1 w-full border-b-2 border-primary bg-transparent pb-1 text-[0.95rem] outline-none"
+            />
+          ) : (
+            <p className={`truncate text-[0.95rem] ${value ? "" : "text-base-content/40"}`}>{value || placeholder}</p>
+          )}
+        </div>
+        {editing ? (
+          <div className="flex gap-1">
+            <button type="button" className="icon-btn icon-btn-sm" onClick={() => setEditing(false)} aria-label="Cancel">
+              <X className="size-4" />
+            </button>
+            <button type="button" className="icon-btn icon-btn-sm bg-primary text-primary-content hover:bg-primary hover:text-primary-content" onClick={() => save()} aria-label="Save" disabled={busy}>
+              {busy ? <Spinner className="size-4" /> : <Check className="size-4" />}
+            </button>
+          </div>
+        ) : (
           <button
-            className="ml-auto text-primary text-xs flex items-center gap-1 hover:underline"
+            type="button"
+            className="icon-btn icon-btn-sm"
             onClick={() => {
               setDraft(value || "");
               setEditing(true);
             }}
+            aria-label={`Edit ${label}`}
           >
-            <Pencil className="size-3" /> Edit
+            <Pencil className="size-4" />
           </button>
         )}
       </div>
-      {editing ? (
-        <div className="flex gap-2">
-          <input
-            className="input input-bordered flex-1"
-            value={draft}
-            maxLength={maxLength}
-            placeholder={placeholder}
-            onChange={(e) => setDraft(e.target.value)}
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSave();
-              if (e.key === "Escape") setEditing(false);
-            }}
-          />
-          <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
-            Save
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
-            Cancel
-          </button>
+      {editing && presets && (
+        <div className="no-scrollbar anim-fade mt-3 flex gap-2 overflow-x-auto pl-12">
+          {presets.map((p) => (
+            <button key={p} type="button" className="chip" onMouseDown={(e) => e.preventDefault()} onClick={() => save(p)}>
+              {p}
+            </button>
+          ))}
         </div>
-      ) : (
-        <p className="px-4 py-2.5 bg-base-200 rounded-lg border border-base-300">
-          {value || <span className="text-base-content/40">{placeholder}</span>}
-        </p>
       )}
     </div>
   );
-};
+}
 
-const ProfilePage = () => {
-  const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
-  const [selectedImg, setSelectedImg] = useState(null);
-  const [successMsg, setSuccessMsg] = useState("");
-  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
-  const [showAboutPresets, setShowAboutPresets] = useState(false);
-  const [aboutDraft, setAboutDraft] = useState(authUser?.about || "");
+export default function ProfilePage() {
+  const me = useAuthStore((s) => s.authUser);
+  const update = useAuthStore((s) => s.updateProfile);
+  const [uploading, setUploading] = useState(false);
+  const [statusText, setStatusText] = useState(me.status?.text || "");
+  const [statusEmoji, setStatusEmoji] = useState(me.status?.emoji || "💬");
+  const [clearAfter, setClearAfter] = useState("today");
+  const fileRef = useRef(null);
+  const deviceTz = myTimezone();
+  const focusing = me.focus?.until && new Date(me.focus.until) > new Date();
 
-  const saveAbout = async () => {
-    if (aboutDraft !== (authUser?.about || "")) {
-      await updateProfile({ about: aboutDraft });
+  const save = async (patch, ok) => {
+    try {
+      await update(patch);
+      if (ok) toast.success(ok);
+    } catch (err) {
+      toast.error(errorMessage(err));
     }
   };
 
-  const flashSuccess = (msg) => {
-    setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(""), 2000);
-  };
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      flashSuccess("");
-      return;
+  const changePhoto = async (file) => {
+    setUploading(true);
+    try {
+      const cropped = await cropSquare(file);
+      const att = await uploadFile(cropped, { purpose: "avatar" });
+      await update({ profilePic: att.url });
+      toast.success("Profile photo updated");
+    } catch (err) {
+      toast.error(errorMessage(err, "Couldn't update your photo"));
+    } finally {
+      setUploading(false);
     }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-
-    reader.onload = async () => {
-      const base64Image = reader.result;
-      setSelectedImg(base64Image);
-      await updateProfile({ profilePic: base64Image });
-      flashSuccess("Profile photo updated!");
-    };
   };
 
-  const handleRemovePhoto = async () => {
-    setSelectedImg(null);
-    await updateProfile({ removeProfilePic: true });
-    flashSuccess("Profile photo removed");
+  const setStatus = (text, emoji) => {
+    const opt = CLEAR_AFTER.find((o) => o.id === clearAfter);
+    save({ status: { text, emoji, expiresAt: opt?.at() || null } }, "Status updated");
   };
-
-  const currentPhoto = selectedImg || authUser.profilePic || "/avatar.png";
 
   return (
-    <div className="min-h-full w-full bg-gradient-to-br from-base-200 via-base-100 to-base-300 py-8">
-      <div className="max-w-2xl mx-auto p-4 py-8">
-        <Link
-          to="/chat"
-          className="inline-flex items-center gap-2 text-sm font-medium text-base-content/60 hover:text-primary transition-colors mb-4"
-        >
-          <ArrowLeft className="size-4" /> Back to Dashboard
-        </Link>
-
-        <div className="bg-base-100 rounded-2xl shadow-xl p-8 space-y-10">
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold">Your Profile</h1>
-            <p className="text-base-content/60">Manage your BlinkChat account info</p>
-          </div>
-
-          {/* Avatar Upload */}
-          <div className="flex flex-col items-center gap-4">
-            <div className="relative group">
-              <button
-                type="button"
-                onClick={() => setShowPhotoViewer(true)}
-                className="block rounded-full focus:outline-none focus:ring-4 focus:ring-primary/30"
-                aria-label="View profile photo"
-              >
-                <img
-                  src={currentPhoto}
-                  alt="Profile"
-                  className="size-32 rounded-full object-cover border-4 border-primary/20 shadow-md"
-                />
-              </button>
-              <label
-                htmlFor="avatar-upload"
-                className={`
-                  absolute bottom-0 right-0 bg-primary p-2 rounded-full cursor-pointer
-                  shadow-lg border-2 border-base-100 transition-all duration-200
-                  group-hover:scale-110
-                  ${isUpdatingProfile ? "animate-pulse pointer-events-none opacity-70" : ""}
-                `}
-                aria-label="Change profile photo"
-                tabIndex={0}
-              >
-                {isUpdatingProfile ? (
-                  <Loader2 className="w-5 h-5 text-primary-content animate-spin" />
-                ) : (
-                  <Camera className="w-5 h-5 text-primary-content" />
-                )}
-                <input
-                  type="file"
-                  id="avatar-upload"
-                  className="hidden"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  disabled={isUpdatingProfile}
-                  aria-disabled={isUpdatingProfile}
-                />
-              </label>
-              {successMsg && (
-                <span className="absolute -bottom-9 left-1/2 -translate-x-1/2 bg-success/90 text-success-content px-3 py-1 rounded-full text-xs flex items-center gap-1 shadow whitespace-nowrap">
-                  <CheckCircle2 className="w-4 h-4" /> {successMsg}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <p className="text-sm text-base-content/50">
-                {isUpdatingProfile ? "Uploading..." : "Tap photo to change or view"}
-              </p>
-              {authUser.profilePic && (
-                <button
-                  onClick={handleRemovePhoto}
-                  className="text-xs text-error flex items-center gap-1 hover:underline"
-                  disabled={isUpdatingProfile}
-                >
-                  <Trash2 className="size-3" /> Remove
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Profile Info */}
-          <div className="space-y-6">
-            <EditableField
-              icon={User}
-              label="Full Name"
-              value={authUser?.fullName}
-              placeholder="Add your name"
-              maxLength={50}
-              saving={isUpdatingProfile}
-              onSave={(val) => val && updateProfile({ fullName: val })}
-            />
-
-            {/* About */}
-            <div className="space-y-1.5 relative">
-              <div className="text-sm text-base-content/60 flex items-center gap-2">
-                <MessageCircle className="w-4 h-4" />
-                About
-              </div>
-              <div className="relative">
-                <input
-                  className="input input-bordered w-full pr-16"
-                  value={aboutDraft}
-                  maxLength={150}
-                  placeholder="Add a status message"
-                  onFocus={() => setShowAboutPresets(true)}
-                  onChange={(e) => setAboutDraft(e.target.value)}
-                  onBlur={() => {
-                    saveAbout();
-                    setTimeout(() => setShowAboutPresets(false), 150);
-                  }}
-                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/40">
-                  {aboutDraft.length}/150
-                </span>
-              </div>
-              {showAboutPresets && (
-                <div className="absolute z-10 mt-1 w-full bg-base-100 border border-base-300 rounded-xl shadow-lg overflow-hidden">
-                  {ABOUT_PRESETS.map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-primary/10"
-                      onMouseDown={() => {
-                        setAboutDraft(preset);
-                        updateProfile({ about: preset });
-                        setShowAboutPresets(false);
-                      }}
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <EditableField
-              icon={Phone}
-              label="Phone Number"
-              value={authUser?.phone}
-              placeholder="Add your phone number"
-              maxLength={20}
-              saving={isUpdatingProfile}
-              onSave={(val) => updateProfile({ phone: val })}
-            />
-
-            {/* Email (not editable) */}
-            <div className="space-y-1.5">
-              <div className="text-sm text-base-content/60 flex items-center gap-2">
-                <Mail className="w-4 h-4" />
-                Email Address
-              </div>
-              <p className="px-4 py-2.5 bg-base-200 rounded-lg border border-base-300">{authUser?.email}</p>
-            </div>
-          </div>
-
-          {/* Account Info */}
-          <div className="mt-6 bg-base-100 rounded-xl p-6 border border-base-300">
-            <h2 className="text-lg font-medium mb-4">Account Information</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between py-2 border-b border-base-300">
-                <span>Member Since</span>
-                <span>{formatDate(authUser.createdAt)}</span>
-              </div>
-              <div className="flex items-center justify-between py-2">
-                <span>Account Status</span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-success/15 text-success rounded-full text-xs font-semibold">
-                  <span className="w-2 h-2 bg-success rounded-full inline-block" />
-                  Active
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Full photo viewer */}
-      {showPhotoViewer && (
-        <div
-          className="fixed inset-0 z-[90] bg-black/85 flex items-center justify-center p-6 animate-fade-in"
-          onClick={() => setShowPhotoViewer(false)}
-        >
+    <PageShell title="Profile" subtitle="How others see you on BlinkChat">
+      <section className="flex flex-col items-center pt-2 text-center">
+        <div className="relative">
+          <Avatar src={me.profilePic} name={me.fullName} seed={me._id} size={120} />
           <button
-            className="absolute top-4 right-4 btn btn-circle btn-ghost text-white"
-            onClick={() => setShowPhotoViewer(false)}
-            aria-label="Close"
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="absolute bottom-1 right-1 flex size-10 items-center justify-center rounded-full bg-primary text-primary-content shadow-soft ring-4 ring-base-200 transition active:scale-95"
+            aria-label="Change profile photo"
+            disabled={uploading}
           >
-            <X className="size-6" />
+            {uploading ? <Spinner className="size-4" /> : <Camera className="size-[18px]" />}
           </button>
-          <img
-            src={currentPhoto}
-            alt="Profile full size"
-            className="max-w-full max-h-full rounded-2xl shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) changePhoto(f);
+            }}
           />
         </div>
-      )}
-    </div>
-  );
-};
+        <h2 className="mt-3 text-xl font-semibold tracking-tight">{me.fullName}</h2>
+        {me.profilePic && (
+          <button type="button" onClick={() => save({ profilePic: "" }, "Photo removed")} className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/50 hover:text-error">
+            <Trash2 className="size-3.5" /> Remove photo
+          </button>
+        )}
+      </section>
 
-export default ProfilePage;
+      <Card title="About you">
+        <EditableRow icon={Pencil} label="Name" value={me.fullName} placeholder="Your name" maxLength={60} onSave={(v) => (v ? update({ fullName: v }) : Promise.reject(new Error("Name can't be empty")))} />
+        <EditableRow icon={Check} label="About" value={me.about} placeholder="A few words about you" maxLength={150} presets={ABOUT_PRESETS} onSave={(v) => update({ about: v })} />
+        <EditableRow icon={Phone} label="Phone" value={me.phone} placeholder="Add a phone number" maxLength={24} inputMode="tel" onSave={(v) => update({ phone: v })} />
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-base-200 text-base-content/70">
+            <Mail className="size-[18px]" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-base-content/50">Email</p>
+            <p className="truncate text-[0.95rem]">{me.email}</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Status" description="A short note people see in your chats. It clears automatically.">
+        <div className="space-y-3 p-4">
+          {me.status?.text || me.status?.emoji ? (
+            <div className="flex items-center gap-3 rounded-xl bg-primary/[0.06] px-3 py-2.5">
+              <span className="text-xl">{me.status.emoji}</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{me.status.text}</p>
+                <p className="text-xs text-base-content/50">{me.status.expiresAt ? `Clears ${formatUntil(me.status.expiresAt).replace("until ", "at ")}` : "Doesn't clear automatically"}</p>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm rounded-lg" onClick={() => save({ status: null }, "Status cleared")}>
+                Clear
+              </button>
+            </div>
+          ) : null}
+          <div className="flex gap-2">
+            <input value={statusEmoji} onChange={(e) => setStatusEmoji([...e.target.value].slice(-2).join(""))} className="field w-14 px-0 text-center text-lg" aria-label="Status emoji" />
+            <input value={statusText} onChange={(e) => setStatusText(e.target.value)} maxLength={80} placeholder="What's your status?" className="field flex-1" onKeyDown={(e) => e.key === "Enter" && statusText.trim() && setStatus(statusText.trim(), statusEmoji)} />
+          </div>
+          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+            {STATUS_PRESETS.map((p) => (
+              <button key={p.text} type="button" className="chip" onClick={() => setStatus(p.text, p.emoji)}>
+                {p.emoji} {p.text}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-base-content/60">Clear after</span>
+            <select value={clearAfter} onChange={(e) => setClearAfter(e.target.value)} className="select select-bordered select-sm rounded-lg">
+              {CLEAR_AFTER.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="btn btn-primary btn-sm ml-auto rounded-lg" disabled={!statusText.trim()} onClick={() => setStatus(statusText.trim(), statusEmoji)}>
+              Set status
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Focus mode" description="Pause notifications. Contacts see you're focusing and can mark a message urgent if you allow it.">
+        <div className="p-4">
+          {focusing ? (
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-warning/15 text-warning">
+                <Target className="size-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Focusing {formatUntil(me.focus.until)}</p>
+                <p className="text-xs text-base-content/55">Notifications are paused</p>
+              </div>
+              <button type="button" className="btn btn-sm rounded-lg" onClick={() => save({ focus: { until: null } }, "Focus mode off")}>
+                End now
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {FOCUS_FOR.map((o) => (
+                <button key={o.label} type="button" className="btn h-11 min-h-0 rounded-xl" onClick={() => save({ focus: { until: o.at().toISOString(), allowUrgent: me.focus?.allowUrgent !== false } }, "Focus mode on")}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <Toggle
+          label="Allow urgent messages"
+          description="Messages marked urgent still notify you while focusing (limited to 3 per person per hour)."
+          checked={me.focus?.allowUrgent !== false}
+          onChange={(v) => save({ focus: { until: focusing ? me.focus.until : null, allowUrgent: v } })}
+        />
+      </Card>
+
+      <Card title="Time zone" description="Shown to contacts as your local time (you can hide it in Settings → Privacy).">
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-base-200 text-base-content/70">
+            <Clock3 className="size-[18px]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[0.95rem] font-medium">{zoneCity(me.timezone)}</p>
+            <p className="text-xs text-base-content/55">
+              {me.timezone} · {timeIn(me.timezone)}
+            </p>
+          </div>
+          {me.timezone !== deviceTz && (
+            <button
+              type="button"
+              className="btn btn-sm rounded-lg"
+              onClick={() => {
+                storage.remove("blinkchat.tzManual");
+                save({ timezone: deviceTz }, "Time zone updated");
+              }}
+            >
+              <RefreshCw className="size-3.5" /> Use {zoneCity(deviceTz)}
+            </button>
+          )}
+        </div>
+      </Card>
+
+      <p className="text-center text-xs text-base-content/40">Member since {formatLongDate(me.createdAt)}</p>
+    </PageShell>
+  );
+}

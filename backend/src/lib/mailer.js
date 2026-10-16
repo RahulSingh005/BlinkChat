@@ -1,58 +1,58 @@
 import nodemailer from "nodemailer";
+import { env, features } from "../config/env.js";
 
 let transporter = null;
 
-const isEmailConfigured = () =>
-  Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
-
 const getTransporter = () => {
-  if (!isEmailConfigured()) return null;
-  if (transporter) return transporter;
-
-  transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || "smtp.gmail.com",
-    port: Number(process.env.EMAIL_PORT) || 587,
-    secure: Number(process.env.EMAIL_PORT) === 465,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-
+  if (!features.email) return null;
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: env.EMAIL_HOST,
+      port: env.EMAIL_PORT,
+      secure: env.EMAIL_PORT === 465,
+      auth: { user: env.EMAIL_USER, pass: env.EMAIL_PASS },
+    });
+  }
   return transporter;
 };
 
-/**
- * Sends the password-reset OTP email.
- * Falls back to logging the OTP to the server console when SMTP
- * credentials are not configured, so the flow is still testable
- * locally without setting up a real mailbox.
- */
-export const sendOtpEmail = async (toEmail, otp) => {
-  const t = getTransporter();
+/** Password reset is available when SMTP is set up (or always in development). */
+export const passwordResetAvailable = () => features.email || !env.isProd;
 
+const escapeHtml = (s = "") =>
+  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+/**
+ * Sends the password-reset code. In development without SMTP the code is
+ * printed to the server console so the flow can still be tested. In
+ * production the code is never logged.
+ */
+export async function sendOtpEmail(toEmail, otp, name = "") {
+  const t = getTransporter();
   if (!t) {
-    console.log(
-      `\n[BlinkChat] EMAIL_USER/EMAIL_PASS not configured — printing OTP instead of emailing it.\n` +
-        `[BlinkChat] Password reset OTP for ${toEmail}: ${otp} (valid for 10 minutes)\n`
-    );
+    if (env.isProd) throw new Error("Email is not configured");
+    console.log(`\n[mail] SMTP not configured — password reset code for ${toEmail}: ${otp} (valid 10 minutes)\n`);
     return { delivered: false };
   }
 
+  const greeting = name ? `Hi ${escapeHtml(name.split(" ")[0])},` : "Hi,";
   await t.sendMail({
-    from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+    from: env.EMAIL_FROM || `BlinkChat <${env.EMAIL_USER}>`,
     to: toEmail,
-    subject: "Your BlinkChat password reset code",
-    text: `Your BlinkChat verification code is ${otp}. It expires in 10 minutes. If you didn't request this, you can safely ignore this email.`,
+    subject: `${otp} is your BlinkChat verification code`,
+    text: `${greeting.replace(/<[^>]+>/g, "")}\n\nYour BlinkChat verification code is ${otp}. It expires in 10 minutes.\n\nIf you didn't request a password reset, you can ignore this email — your password won't change.`,
     html: `
-      <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
-        <h2 style="color:#7c3aed;">BlinkChat password reset</h2>
-        <p>Use the code below to reset your password. This code expires in 10 minutes.</p>
-        <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; text-align: center; background: #f4f4f7; padding: 16px; border-radius: 12px;">${otp}</p>
-        <p style="color: #888; font-size: 12px;">If you didn't request this, you can safely ignore this email.</p>
-      </div>
-    `,
+      <div style="background:#f4f6fb;padding:32px 16px;font-family:Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+        <div style="max-width:460px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;border:1px solid #e6e9f2;">
+          <div style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:24px;">
+            <span style="display:inline-block;width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3b5bfd,#0ea5e9);vertical-align:middle;margin-right:8px;"></span>BlinkChat
+          </div>
+          <p style="color:#0f172a;font-size:15px;margin:0 0 8px;">${greeting}</p>
+          <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 20px;">Use this code to reset your password. It expires in <strong>10 minutes</strong>.</p>
+          <div style="font-size:34px;font-weight:800;letter-spacing:10px;text-align:center;background:#f1f4ff;color:#2f47d6;padding:18px 0;border-radius:12px;">${otp}</div>
+          <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:24px 0 0;">If you didn't request this, you can safely ignore this email. Never share this code with anyone — BlinkChat will never ask for it.</p>
+        </div>
+      </div>`,
   });
-
   return { delivered: true };
-};
+}

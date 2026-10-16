@@ -1,337 +1,342 @@
-import { generateToken, generateOtp } from "../lib/utils.js";
-import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
-import cloudinary from "../lib/cloudinary.js";
 import { OAuth2Client } from "google-auth-library";
-import { sendOtpEmail } from "../lib/mailer.js";
+import { env, features } from "../config/env.js";
+import Conversation from "../models/conversation.model.js";
+import Message from "../models/message.model.js";
+import PushSubscription from "../models/pushSubscription.model.js";
+import Reminder from "../models/reminder.model.js";
+import ScheduledMessage from "../models/scheduledMessage.model.js";
+import User from "../models/user.model.js";
+import { badRequest, conflict, tooMany, unauthorized, unavailable } from "../lib/errors.js";
+import { passwordResetAvailable, sendOtpEmail } from "../lib/mailer.js";
+import { disconnectUserSockets, emitToUser } from "../lib/realtime.js";
+import { invalidateBlocks, invalidateContacts } from "../lib/cache.js";
+import { selfUser } from "../lib/serializers.js";
+import { deleteImageByUrl, deleteStoredFile, isTrustedAvatarUrl } from "../lib/storage.js";
+import { clearSession, issueSession } from "../lib/tokens.js";
+import {
+  generateOtp,
+  hmac,
+  isValidTimezone,
+  randomToken,
+  safeEqual,
+  sha256,
+} from "../lib/utils.js";
+import { broadcastProfile } from "../services/user.service.js";
+import { removeMemberFromGroup } from "../services/group.service.js";
 
-const googleClient = process.env.GOOGLE_CLIENT_ID
-  ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
-  : null;
+const BCRYPT_ROUNDS = 10;
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_RESEND_MS = 40 * 1000;
+const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
 
-const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const googleClient = features.google ? new OAuth2Client(env.GOOGLE_CLIENT_ID) : null;
 
-// Shape the user object the same way everywhere so the frontend always
-// receives the fields it needs (fullName, about, phone, createdAt, etc.)
-// right away — previously signup/login only returned a partial object,
-// which is why parts of the app (like the Profile page) looked broken
-// until the page was refreshed.
-const sanitizeUser = (user) => ({
-  _id: user._id,
-  fullName: user.fullName,
-  email: user.email,
-  profilePic: user.profilePic,
-  about: user.about,
-  phone: user.phone,
-  authProvider: user.authProvider,
-  blockedUsers: user.blockedUsers,
-  createdAt: user.createdAt,
-  updatedAt: user.updatedAt,
-});
+// Comparing against a dummy hash when the email doesn't exist keeps login
+// response times uniform, so they can't be used to discover accounts.
+const DUMMY_HASH = bcrypt.hashSync("blinkchat-timing-equalizer", BCRYPT_ROUNDS);
+
+const otpDigest = (userId, otp) => hmac(`${userId}:${otp}`, env.JWT_SECRET);
+
+const sessionResponse = (req, res, user, status = 200) => {
+  const token = issueSession(req, res, user);
+  res.status(status).json({ user: selfUser(user), ...(token ? { token } : {}) });
+};
+
+/** Revokes every existing session of `user` (other devices get kicked). */
+function revokeSessions(user, { exceptSocketId } = {}) {
+  emitToUser(user._id, "session:revoked", { exceptSocketId: exceptSocketId || null });
+  // Give clients a moment to receive the event before cutting the sockets.
+  setTimeout(() => disconnectUserSockets(user._id, { exceptSocketId }), 300);
+}
 
 export const signup = async (req, res) => {
-  const { fullName, email, password } = req.body;
-  try {
-    if (!fullName || !email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
+  const { fullName, email, password, timezone } = req.data;
 
-    if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
-    }
+  if (await User.exists({ email })) throw conflict("An account with this email already exists. Try signing in instead.");
 
-    const user = await User.findOne({ email });
+  const user = await User.create({
+    fullName,
+    email,
+    password: await bcrypt.hash(password, BCRYPT_ROUNDS),
+    hasPassword: true,
+    timezone: isValidTimezone(timezone) ? timezone : "UTC",
+  });
 
-    if (user) return res.status(400).json({ message: "Email already exists" });
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const newUser = new User({
-      fullName,
-      email,
-      password: hashedPassword,
-    });
-
-    if (newUser) {
-      // generate jwt token here
-      generateToken(newUser._id, res);
-      await newUser.save();
-
-      res.status(201).json(sanitizeUser(newUser));
-    } else {
-      res.status(400).json({ message: "Invalid user data" });
-    }
-  } catch (error) {
-    console.log("Error in signup controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
+  sessionResponse(req, res, user, 201);
 };
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.findOne({ email });
+  const { email, password } = req.data;
+  const user = await User.findOne({ email }).select("+password");
 
-    if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    if (user.authProvider === "google" && !user.password) {
-      return res.status(400).json({
-        message: "This account uses Google sign-in. Please continue with Google.",
-      });
-    }
-
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
-    if (!isPasswordCorrect) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    generateToken(user._id, res);
-
-    res.status(200).json(sanitizeUser(user));
-  } catch (error) {
-    console.log("Error in login controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
+  if (!user) {
+    await bcrypt.compare(password, DUMMY_HASH);
+    throw unauthorized("Incorrect email or password");
   }
+  if (!user.hasPassword) {
+    throw badRequest("This account uses Google sign-in. Continue with Google, or use “Forgot password” to set a password.");
+  }
+  if (!user.password || !(await bcrypt.compare(password, user.password))) {
+    throw unauthorized("Incorrect email or password");
+  }
+
+  sessionResponse(req, res, user);
 };
 
 export const logout = (req, res) => {
-  try {
-    // Must match the attributes used when the cookie was set (SameSite,
-    // Secure), or some browsers treat this as a different cookie and won't
-    // actually clear the original session.
-    const isProd = process.env.NODE_ENV === "production";
-    res.cookie("jwt", "", {
-      maxAge: 0,
-      httpOnly: true,
-      sameSite: isProd ? "None" : "Lax",
-      secure: isProd,
-    });
-    res.status(200).json({ message: "Logged out successfully" });
-  } catch (error) {
-    console.log("Error in logout controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
+  clearSession(res);
+  res.json({ message: "Logged out" });
 };
 
-// Sign in / sign up with a Google ID token obtained on the client via
-// Google Identity Services. If no account exists yet for the verified
-// email, one is created automatically (with a random password so the
-// schema's `password` requirement is still satisfied).
+/** "Log out of all devices": bumps tokenVersion so every JWT dies. */
+export const logoutAll = async (req, res) => {
+  const user = await User.findByIdAndUpdate(req.user._id, { $inc: { tokenVersion: 1 } }, { new: true });
+  revokeSessions(user);
+  clearSession(res);
+  res.json({ message: "Logged out of all devices" });
+};
+
 export const googleAuth = async (req, res) => {
+  if (!googleClient) throw unavailable("Google sign-in isn't configured on this server");
+  const { credential, timezone } = req.data;
+
+  let payload;
   try {
-    const { credential } = req.body;
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: env.GOOGLE_CLIENT_ID });
+    payload = ticket.getPayload();
+  } catch {
+    throw unauthorized("Google sign-in failed. Please try again.");
+  }
 
-    if (!credential) {
-      return res.status(400).json({ message: "Missing Google credential" });
-    }
+  // Only trust emails Google has verified; otherwise anyone could create a
+  // Google account for someone else's address and take over their account.
+  if (!payload?.email || payload.email_verified !== true) {
+    throw unauthorized("Your Google account email isn't verified.");
+  }
 
-    if (!googleClient) {
-      console.log("GOOGLE_CLIENT_ID is not set in the backend .env file");
-      return res.status(500).json({
-        message: "Google sign-in isn't configured on the server yet",
-      });
-    }
+  const email = payload.email.toLowerCase();
+  const googleId = payload.sub;
+  let user = await User.findOne({ $or: [{ googleId }, { email }] });
 
-    const ticket = await googleClient.verifyIdToken({
-      idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID,
+  if (!user) {
+    user = await User.create({
+      fullName: (payload.name || email.split("@")[0]).slice(0, 60),
+      email,
+      password: await bcrypt.hash(randomToken(24), BCRYPT_ROUNDS),
+      hasPassword: false,
+      profilePic: payload.picture || "",
+      authProvider: "google",
+      googleId,
+      timezone: isValidTimezone(timezone) ? timezone : "UTC",
     });
-    const payload = ticket.getPayload();
-
-    if (!payload?.email) {
-      return res.status(400).json({ message: "Could not verify Google account" });
-    }
-
-    const { email, name, picture, sub: googleId } = payload;
-
-    let user = await User.findOne({ $or: [{ googleId }, { email }] });
-
-    if (!user) {
-      const randomPassword = await bcrypt.hash(
-        `${googleId}-${Date.now()}-${Math.random()}`,
-        10
-      );
-
-      user = await User.create({
-        fullName: name || email.split("@")[0],
-        email,
-        password: randomPassword,
-        profilePic: picture || "",
-        authProvider: "google",
-        googleId,
-      });
-    } else if (!user.googleId) {
-      // Existing local account with a matching email — link the Google
-      // identity so either sign-in method works going forward.
-      user.googleId = googleId;
-      if (!user.profilePic && picture) user.profilePic = picture;
-      await user.save();
-    }
-
-    generateToken(user._id, res);
-
-    res.status(200).json(sanitizeUser(user));
-  } catch (error) {
-    console.log("Error in googleAuth controller", error.message);
-    res.status(500).json({ message: "Google sign-in failed. Please try again." });
+  } else if (!user.googleId) {
+    // Existing email/password account: link Google so both methods work.
+    user.googleId = googleId;
+    if (!user.profilePic && payload.picture) user.profilePic = payload.picture;
+    await user.save();
   }
-};
 
-export const updateProfile = async (req, res) => {
-  try {
-    const { profilePic, removeProfilePic, fullName, about, phone } = req.body;
-    const userId = req.user._id;
-
-    const update = {};
-
-    if (profilePic) {
-      const uploadResponse = await cloudinary.uploader.upload(profilePic);
-      update.profilePic = uploadResponse.secure_url;
-    } else if (removeProfilePic) {
-      update.profilePic = "";
-    }
-
-    if (typeof fullName === "string" && fullName.trim()) {
-      update.fullName = fullName.trim();
-    }
-
-    if (typeof about === "string") {
-      update.about = about.slice(0, 150);
-    }
-
-    if (typeof phone === "string") {
-      update.phone = phone.trim();
-    }
-
-    if (Object.keys(update).length === 0) {
-      return res.status(400).json({ message: "Nothing to update" });
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(userId, update, {
-      new: true,
-    }).select("-password");
-
-    res.status(200).json(sanitizeUser(updatedUser));
-  } catch (error) {
-    console.log("error in update profile:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
+  sessionResponse(req, res, user);
 };
 
 export const checkAuth = (req, res) => {
-  try {
-    res.status(200).json(sanitizeUser(req.user));
-  } catch (error) {
-    console.log("Error in checkAuth controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
+  // Re-issuing on every check gives a sliding session: active users never
+  // get logged out unexpectedly.
+  sessionResponse(req, res, req.user);
 };
 
-// --- Forgot password (OTP-based) -----------------------------------------
+export const updateProfile = async (req, res) => {
+  const { fullName, about, phone, timezone, profilePic, settings, status, focus } = req.data;
+  const user = req.user;
+  let oldAvatar = null;
+
+  if (fullName !== undefined) user.fullName = fullName;
+  if (about !== undefined) user.about = about;
+  if (phone !== undefined) user.phone = phone;
+  if (timezone !== undefined && isValidTimezone(timezone)) user.timezone = timezone;
+
+  if (profilePic !== undefined && profilePic !== user.profilePic) {
+    if (profilePic && !isTrustedAvatarUrl(profilePic)) throw badRequest("Please upload the photo through BlinkChat");
+    oldAvatar = user.profilePic;
+    user.profilePic = profilePic;
+  }
+
+  if (settings) {
+    for (const [key, value] of Object.entries(settings)) {
+      if (value !== undefined) user.settings[key] = value;
+    }
+  }
+
+  if (status !== undefined) {
+    user.status = status
+      ? { emoji: status.emoji || "", text: status.text || "", expiresAt: status.expiresAt || null }
+      : { emoji: "", text: "", expiresAt: null };
+  }
+
+  if (focus !== undefined) {
+    const until = focus.until && focus.until.getTime() > Date.now() ? focus.until : null;
+    user.focus = { until, allowUrgent: focus.allowUrgent ?? user.focus?.allowUrgent ?? true };
+  }
+
+  await user.save();
+
+  if (oldAvatar) deleteImageByUrl(oldAvatar);
+
+  res.json({ user: selfUser(user) });
+  broadcastProfile(user).catch(() => {});
+};
+
+export const changePassword = async (req, res) => {
+  const { currentPassword, newPassword } = req.data;
+  const user = await User.findById(req.user._id).select("+password");
+
+  if (user.hasPassword) {
+    if (!currentPassword) throw badRequest("Enter your current password");
+    if (!(await bcrypt.compare(currentPassword, user.password || ""))) throw badRequest("Your current password is incorrect");
+  }
+
+  user.password = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  user.hasPassword = true;
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  await user.save();
+
+  // Keep this device signed in, sign everything else out.
+  revokeSessions(user, { exceptSocketId: req.headers["x-socket-id"] });
+  sessionResponse(req, res, user);
+};
+
+export const deleteAccount = async (req, res) => {
+  const { password, deleteMessages } = req.data;
+  const user = await User.findById(req.user._id).select("+password");
+
+  if (user.hasPassword && !(await bcrypt.compare(password || "", user.password || ""))) {
+    throw badRequest("Incorrect password");
+  }
+
+  // Leave every group (keeps admin succession + system notices correct).
+  const groups = await Conversation.find({ type: "group", "members.user": user._id });
+  for (const group of groups) {
+    await removeMemberFromGroup(group, user._id, { event: "member_left" });
+  }
+
+  const directs = await Conversation.find({ type: "direct", "members.user": user._id }).select("members.user").lean();
+  const contactIds = directs.flatMap((c) => c.members.map((m) => m.user));
+
+  if (deleteMessages) {
+    const sent = await Message.find({ sender: user._id, "attachments.0": { $exists: true } }).select("attachments").lean();
+    sent.forEach((m) => m.attachments.forEach((a) => deleteStoredFile(a)));
+    await Message.deleteMany({ sender: user._id });
+  }
+
+  await Promise.all([
+    PushSubscription.deleteMany({ user: user._id }),
+    Reminder.deleteMany({ user: user._id }),
+    ScheduledMessage.deleteMany({ sender: user._id }),
+    User.updateMany({ blockedUsers: user._id }, { $pull: { blockedUsers: user._id } }),
+  ]);
+  await User.deleteOne({ _id: user._id });
+
+  invalidateBlocks(user._id);
+  invalidateContacts([user._id, ...contactIds]);
+  for (const id of contactIds) emitToUser(id, "user:deleted", { userId: String(user._id) });
+  revokeSessions(user);
+  clearSession(res);
+  res.json({ message: "Your account has been deleted" });
+};
+
+// ---- Forgot password: email -> 6-digit code -> reset token -> new password
 
 export const forgotPassword = async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ message: "Email is required" });
+  if (!passwordResetAvailable()) throw unavailable("Password reset by email isn't set up on this server yet.");
 
-    const user = await User.findOne({ email });
+  const generic = { message: "If an account exists for that email, we've sent a 6-digit code." };
+  const user = await User.findOne({ email: req.data.email }).select("+resetOtpRequestedAt");
+  if (!user) return res.json(generic);
 
-    // Always respond with the same generic message so this endpoint can't
-    // be used to check which emails have an account.
-    const genericResponse = {
-      message: "If an account exists for that email, a verification code has been sent.",
-    };
-
-    if (!user) {
-      return res.status(200).json(genericResponse);
-    }
-
-    const otp = generateOtp();
-    const salt = await bcrypt.genSalt(10);
-    user.resetPasswordOtp = await bcrypt.hash(otp, salt);
-    user.resetPasswordOtpExpiry = new Date(Date.now() + OTP_TTL_MS);
-    user.resetPasswordVerified = false;
-    await user.save();
-
-    await sendOtpEmail(user.email, otp);
-
-    res.status(200).json(genericResponse);
-  } catch (error) {
-    console.log("Error in forgotPassword controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
+  // Per-account throttle on top of the per-IP rate limit.
+  if (user.resetOtpRequestedAt && Date.now() - user.resetOtpRequestedAt.getTime() < OTP_RESEND_MS) {
+    return res.json(generic);
   }
+
+  const otp = generateOtp();
+  user.resetOtpHash = otpDigest(user._id, otp);
+  user.resetOtpExpiresAt = new Date(Date.now() + OTP_TTL_MS);
+  user.resetOtpAttempts = 0;
+  user.resetOtpRequestedAt = new Date();
+  user.resetTokenHash = null;
+  user.resetTokenExpiresAt = null;
+  await user.save();
+
+  try {
+    await sendOtpEmail(user.email, otp, user.fullName);
+  } catch (err) {
+    console.error("[mail] could not send reset code:", err.message);
+    throw unavailable("We couldn't send the email right now. Please try again in a moment.");
+  }
+  res.json(generic);
 };
 
 export const verifyResetOtp = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-    if (!email || !otp) {
-      return res.status(400).json({ message: "Email and code are required" });
+  const { email, otp } = req.data;
+  const now = new Date();
+
+  // Atomically consume one attempt *before* comparing, so parallel guesses
+  // can never exceed OTP_MAX_ATTEMPTS.
+  const user = await User.findOneAndUpdate(
+    { email, resetOtpHash: { $type: "string" }, resetOtpExpiresAt: { $gt: now }, resetOtpAttempts: { $lt: OTP_MAX_ATTEMPTS } },
+    { $inc: { resetOtpAttempts: 1 } },
+    { new: true }
+  ).select("+resetOtpHash +resetOtpAttempts");
+
+  if (!user) {
+    const exists = await User.findOne({ email }).select("+resetOtpAttempts +resetOtpExpiresAt").lean();
+    if (exists?.resetOtpExpiresAt > now && exists.resetOtpAttempts >= OTP_MAX_ATTEMPTS) {
+      throw tooMany("Too many incorrect attempts. Please request a new code.");
     }
-
-    const user = await User.findOne({ email }).select(
-      "+resetPasswordOtp +resetPasswordOtpExpiry"
-    );
-
-    if (!user || !user.resetPasswordOtp || !user.resetPasswordOtpExpiry) {
-      return res.status(400).json({ message: "Invalid or expired code" });
-    }
-
-    if (user.resetPasswordOtpExpiry.getTime() < Date.now()) {
-      return res.status(400).json({ message: "This code has expired. Please request a new one." });
-    }
-
-    const isMatch = await bcrypt.compare(otp, user.resetPasswordOtp);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Incorrect code. Please try again." });
-    }
-
-    user.resetPasswordVerified = true;
-    await user.save();
-
-    res.status(200).json({ message: "Code verified" });
-  } catch (error) {
-    console.log("Error in verifyResetOtp controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
+    throw badRequest("This code is invalid or has expired. Please request a new one.");
   }
+
+  if (!safeEqual(otpDigest(user._id, otp), user.resetOtpHash)) {
+    const left = OTP_MAX_ATTEMPTS - user.resetOtpAttempts;
+    if (left <= 0) throw tooMany("Too many incorrect attempts. Please request a new code.");
+    throw badRequest(`Incorrect code. ${left} attempt${left === 1 ? "" : "s"} left.`);
+  }
+
+  const resetToken = randomToken(32);
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        resetTokenHash: sha256(resetToken),
+        resetTokenExpiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+        resetOtpHash: null,
+        resetOtpExpiresAt: null,
+        resetOtpAttempts: 0,
+      },
+    }
+  );
+  res.json({ message: "Code verified", resetToken });
 };
 
 export const resetPassword = async (req, res) => {
-  try {
-    const { email, newPassword } = req.body;
+  const { email, resetToken, newPassword } = req.data;
+  const user = await User.findOne({ email }).select("+resetTokenHash +resetTokenExpiresAt");
 
-    if (!email || !newPassword) {
-      return res.status(400).json({ message: "Email and new password are required" });
-    }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
-    }
+  const valid =
+    user?.resetTokenHash &&
+    user.resetTokenExpiresAt?.getTime() > Date.now() &&
+    safeEqual(sha256(resetToken), user.resetTokenHash);
+  if (!valid) throw badRequest("Your reset session has expired. Please start again.");
 
-    const user = await User.findOne({ email }).select(
-      "+resetPasswordVerified +resetPasswordOtpExpiry"
-    );
+  user.password = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  user.hasPassword = true;
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  user.resetTokenHash = null;
+  user.resetTokenExpiresAt = null;
+  await user.save();
 
-    if (!user || !user.resetPasswordVerified) {
-      return res.status(400).json({ message: "Please verify the code sent to your email first" });
-    }
-
-    if (user.resetPasswordOtpExpiry && user.resetPasswordOtpExpiry.getTime() < Date.now()) {
-      return res.status(400).json({ message: "Your verification has expired. Please start again." });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-    user.resetPasswordOtp = null;
-    user.resetPasswordOtpExpiry = null;
-    user.resetPasswordVerified = false;
-    await user.save();
-
-    res.status(200).json({ message: "Password reset successfully. You can now log in." });
-  } catch (error) {
-    console.log("Error in resetPassword controller", error.message);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
+  revokeSessions(user);
+  res.json({ message: "Password updated. You can sign in with your new password." });
 };

@@ -1,341 +1,207 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff, KeyRound, Loader2, Lock, Mail, MessageSquare, ShieldCheck } from "lucide-react";
-import AuthImagePattern from "../components/AuthImagePattern";
-import { useAuthStore } from "../store/useAuthStore";
+import toast from "react-hot-toast";
+import { ArrowLeft, MailCheck } from "lucide-react";
+import AuthLayout from "../components/auth/AuthLayout";
+import { FormError, PasswordField, StrengthMeter, TextField } from "../components/auth/Fields";
+import Spinner from "../components/ui/Spinner";
+import { api, errorMessage } from "../lib/api";
+import { useFeatures } from "../store/useConfigStore";
 
-const RESEND_COOLDOWN = 30;
+const RESEND_SECONDS = 45;
 
-const ForgotPasswordPage = () => {
+function OtpInput({ value, onChange, onComplete, disabled }) {
+  const refs = useRef([]);
+  const digits = value.padEnd(6, " ").slice(0, 6).split("");
+
+  const set = (next) => {
+    const clean = next.replace(/\D/g, "").slice(0, 6);
+    onChange(clean);
+    if (clean.length === 6) onComplete?.(clean);
+  };
+
+  return (
+    <div className="flex justify-between gap-2" role="group" aria-label="6-digit code">
+      {digits.map((d, i) => (
+        <input
+          key={i}
+          ref={(el) => (refs.current[i] = el)}
+          value={d.trim()}
+          disabled={disabled}
+          inputMode="numeric"
+          autoComplete={i === 0 ? "one-time-code" : "off"}
+          maxLength={6}
+          aria-label={`Digit ${i + 1}`}
+          className="field h-14 w-full px-0 text-center text-xl font-semibold tabular-nums"
+          onChange={(e) => {
+            const typed = e.target.value.replace(/\D/g, "");
+            if (!typed) return;
+            if (typed.length > 1) {
+              set(typed); // paste / autofill of the whole code
+              refs.current[Math.min(5, typed.length - 1)]?.focus();
+              return;
+            }
+            const next = value.slice(0, i) + typed + value.slice(i + 1);
+            set(next);
+            refs.current[i + 1]?.focus();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Backspace") {
+              e.preventDefault();
+              if (value[i]) set(value.slice(0, i) + value.slice(i + 1));
+              else if (i > 0) {
+                set(value.slice(0, i - 1) + value.slice(i));
+                refs.current[i - 1]?.focus();
+              }
+            } else if (e.key === "ArrowLeft") refs.current[i - 1]?.focus();
+            else if (e.key === "ArrowRight") refs.current[i + 1]?.focus();
+          }}
+          onPaste={(e) => {
+            e.preventDefault();
+            set(e.clipboardData.getData("text"));
+          }}
+          onFocus={(e) => e.target.select()}
+        />
+      ))}
+    </div>
+  );
+}
+
+export default function ForgotPasswordPage() {
   const navigate = useNavigate();
-  const {
-    forgotPassword,
-    verifyResetOtp,
-    resetPassword,
-    isSendingOtp,
-    isVerifyingOtp,
-    isResettingPassword,
-  } = useAuthStore();
-
-  const [step, setStep] = useState("email"); // email -> otp -> password -> done
+  const features = useFeatures();
+  const [step, setStep] = useState("email"); // email | code | password
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [code, setCode] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const [cooldown, setCooldown] = useState(0);
-  const otpRefs = useRef([]);
 
   useEffect(() => {
-    if (cooldown <= 0) return;
+    if (cooldown <= 0) return undefined;
     const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const handleSendOtp = async (e) => {
-    e.preventDefault();
-    if (!email.trim()) return;
-    const ok = await forgotPassword(email.trim());
-    if (ok) {
-      setStep("otp");
-      setCooldown(RESEND_COOLDOWN);
-      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+  const run = async (fn) => {
+    setError("");
+    setBusy(true);
+    try {
+      await fn();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleResend = async () => {
-    if (cooldown > 0) return;
-    const ok = await forgotPassword(email.trim());
-    if (ok) setCooldown(RESEND_COOLDOWN);
+  const sendCode = (e) => {
+    e?.preventDefault();
+    run(async () => {
+      await api.post("/auth/forgot-password", { email: email.trim() });
+      setStep("code");
+      setCode("");
+      setCooldown(RESEND_SECONDS);
+    });
   };
 
-  const handleOtpChange = (index, value) => {
-    if (!/^\d*$/.test(value)) return;
-    const next = [...otp];
-    next[index] = value.slice(-1);
-    setOtp(next);
-    if (value && index < 5) otpRefs.current[index + 1]?.focus();
-  };
+  const verify = (value = code) =>
+    run(async () => {
+      const res = await api.post("/auth/verify-reset-otp", { email: email.trim(), otp: value });
+      setResetToken(res.data.resetToken);
+      setStep("password");
+    });
 
-  const handleOtpKeyDown = (index, e) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handleOtpPaste = (e) => {
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (!pasted) return;
+  const reset = (e) => {
     e.preventDefault();
-    const next = pasted.split("");
-    while (next.length < 6) next.push("");
-    setOtp(next);
-    otpRefs.current[Math.min(pasted.length, 5)]?.focus();
+    if (password.length < 6) return setError("Use at least 6 characters");
+    if (password !== confirm) return setError("Passwords don't match");
+    run(async () => {
+      await api.post("/auth/reset-password", { email: email.trim(), resetToken, newPassword: password });
+      toast.success("Password updated. Sign in with your new password.");
+      navigate("/login", { replace: true });
+    });
   };
 
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    const code = otp.join("");
-    if (code.length !== 6) return;
-    const ok = await verifyResetOtp(email.trim(), code);
-    if (ok) setStep("password");
-  };
-
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-    if (newPassword.length < 6) return;
-    if (newPassword !== confirmPassword) return;
-    const ok = await resetPassword(email.trim(), newPassword);
-    if (ok) setStep("done");
-  };
+  if (features.passwordReset === false) {
+    return (
+      <AuthLayout>
+        <h1 className="text-2xl font-bold tracking-tight">Password reset unavailable</h1>
+        <p className="mt-2 text-sm text-base-content/60">Email isn't set up on this server yet, so codes can't be sent. Ask the administrator to configure SMTP.</p>
+        <Link to="/login" className="btn mt-6 h-11 min-h-0 w-full rounded-xl">
+          Back to sign in
+        </Link>
+      </AuthLayout>
+    );
+  }
 
   return (
-    <div className="min-h-dvh grid lg:grid-cols-2 bg-mesh relative overflow-hidden">
-      <div className="absolute -top-24 -left-24 w-72 h-72 bg-primary/20 rounded-full blur-3xl animate-float pointer-events-none" />
-      <div className="absolute -bottom-24 -right-16 w-80 h-80 bg-secondary/20 rounded-full blur-3xl animate-float-delayed pointer-events-none" />
+    <AuthLayout>
+      <Link to="/login" className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-base-content/55 hover:text-base-content">
+        <ArrowLeft className="size-4" /> Back to sign in
+      </Link>
 
-      <div className="relative z-10 flex flex-col justify-center items-center p-6 sm:p-12">
-        <Link
-          to="/login"
-          className="absolute top-6 left-6 inline-flex items-center gap-2 text-sm font-medium text-base-content/60 hover:text-primary transition-colors"
-        >
-          <ArrowLeft className="size-4" /> Back to sign in
-        </Link>
+      {step === "email" && (
+        <form onSubmit={sendCode} className="anim-fade space-y-4">
+          <div>
+            <h1 className="text-[1.75rem] font-bold tracking-tight">Reset your password</h1>
+            <p className="mt-1 text-sm text-base-content/60">We'll email you a 6-digit code.</p>
+          </div>
+          <FormError message={error} />
+          <TextField id="email" label="Email" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+          <button type="submit" disabled={busy || !email.trim()} className="btn btn-primary h-12 min-h-0 w-full rounded-xl">
+            {busy ? <Spinner className="size-5" /> : "Send code"}
+          </button>
+        </form>
+      )}
 
-        <div className="w-full max-w-md space-y-8 animate-fade-in">
-          <div className="bg-base-100/70 backdrop-blur-xl border border-base-300/60 rounded-3xl shadow-2xl shadow-primary/5 p-8 sm:p-10">
-            <div className="text-center mb-8">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/30">
-                  {step === "done" ? (
-                    <ShieldCheck className="w-7 h-7 text-primary-content" />
-                  ) : (
-                    <MessageSquare className="w-7 h-7 text-primary-content" />
-                  )}
-                </div>
-                <h1 className="text-2xl font-extrabold mt-3 tracking-tight">
-                  {step === "email" && "Forgot your password?"}
-                  {step === "otp" && "Check your email"}
-                  {step === "password" && "Set a new password"}
-                  {step === "done" && "Password updated!"}
-                </h1>
-                <p className="text-base-content/60 text-sm text-center">
-                  {step === "email" && "Enter your email and we'll send you a verification code."}
-                  {step === "otp" && (
-                    <>
-                      We sent a 6-digit code to <span className="font-medium">{email}</span>
-                    </>
-                  )}
-                  {step === "password" && "Choose a new password for your account."}
-                  {step === "done" && "You can now sign in with your new password."}
-                </p>
-              </div>
-            </div>
-
-            {step === "email" && (
-              <form onSubmit={handleSendOtp} className="space-y-6">
-                <div className="form-control">
-                  <label className="label" htmlFor="email">
-                    <span className="label-text font-medium">Email</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-base-content/40" />
-                    </div>
-                    <input
-                      id="email"
-                      type="email"
-                      className="input input-bordered w-full pl-10 rounded-xl focus:input-primary"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      autoComplete="email"
-                      required
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  className="btn btn-primary w-full rounded-xl flex items-center justify-center gap-2"
-                  disabled={isSendingOtp}
-                >
-                  {isSendingOtp ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" /> Sending code...
-                    </>
-                  ) : (
-                    "Send verification code"
-                  )}
-                </button>
-              </form>
-            )}
-
-            {step === "otp" && (
-              <form onSubmit={handleVerifyOtp} className="space-y-6">
-                <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
-                  {otp.map((digit, i) => (
-                    <input
-                      key={i}
-                      ref={(el) => (otpRefs.current[i] = el)}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleOtpChange(i, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                      className="input input-bordered size-12 text-center text-lg font-bold rounded-xl focus:input-primary"
-                      aria-label={`Digit ${i + 1}`}
-                    />
-                  ))}
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn btn-primary w-full rounded-xl flex items-center justify-center gap-2"
-                  disabled={isVerifyingOtp || otp.join("").length !== 6}
-                >
-                  {isVerifyingOtp ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" /> Verifying...
-                    </>
-                  ) : (
-                    "Verify code"
-                  )}
-                </button>
-
-                <div className="text-center text-sm text-base-content/60">
-                  Didn&apos;t get a code?{" "}
-                  <button
-                    type="button"
-                    onClick={handleResend}
-                    disabled={cooldown > 0 || isSendingOtp}
-                    className="link link-primary font-medium disabled:no-underline disabled:text-base-content/40"
-                  >
-                    {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"}
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setStep("email")}
-                  className="text-xs text-base-content/50 hover:text-primary flex items-center gap-1 mx-auto"
-                >
-                  <ArrowLeft className="size-3" /> Use a different email
-                </button>
-              </form>
-            )}
-
-            {step === "password" && (
-              <form onSubmit={handleResetPassword} className="space-y-6">
-                <div className="form-control">
-                  <label className="label" htmlFor="newPassword">
-                    <span className="label-text font-medium">New password</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-base-content/40" />
-                    </div>
-                    <input
-                      id="newPassword"
-                      type={showPassword ? "text" : "password"}
-                      className="input input-bordered w-full pl-10 rounded-xl focus:input-primary"
-                      placeholder="••••••••"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      autoComplete="new-password"
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                      onClick={() => setShowPassword(!showPassword)}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5 text-base-content/40" />
-                      ) : (
-                        <Eye className="h-5 w-5 text-base-content/40" />
-                      )}
-                    </button>
-                  </div>
-                  {newPassword && newPassword.length < 6 && (
-                    <span className="text-error text-xs mt-1">At least 6 characters</span>
-                  )}
-                </div>
-
-                <div className="form-control">
-                  <label className="label" htmlFor="confirmPassword">
-                    <span className="label-text font-medium">Confirm password</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <KeyRound className="h-5 w-5 text-base-content/40" />
-                    </div>
-                    <input
-                      id="confirmPassword"
-                      type={showPassword ? "text" : "password"}
-                      className="input input-bordered w-full pl-10 rounded-xl focus:input-primary"
-                      placeholder="••••••••"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      autoComplete="new-password"
-                      required
-                    />
-                  </div>
-                  {confirmPassword && confirmPassword !== newPassword && (
-                    <span className="text-error text-xs mt-1">Passwords don&apos;t match</span>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn btn-primary w-full rounded-xl flex items-center justify-center gap-2"
-                  disabled={
-                    isResettingPassword ||
-                    newPassword.length < 6 ||
-                    newPassword !== confirmPassword
-                  }
-                >
-                  {isResettingPassword ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" /> Updating...
-                    </>
-                  ) : (
-                    "Update password"
-                  )}
-                </button>
-              </form>
-            )}
-
-            {step === "done" && (
-              <button
-                onClick={() => navigate("/login")}
-                className="btn btn-primary w-full rounded-xl"
-              >
-                Back to sign in
-              </button>
-            )}
-
-            {step === "email" && (
-              <div className="text-center mt-6">
-                <p className="text-base-content/60">
-                  Remembered it?{" "}
-                  <Link to="/login" className="link link-primary font-medium">
-                    Sign in
-                  </Link>
-                </p>
-              </div>
-            )}
+      {step === "code" && (
+        <div className="anim-fade space-y-5">
+          <div>
+            <span className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <MailCheck className="size-6" />
+            </span>
+            <h1 className="text-[1.75rem] font-bold tracking-tight">Check your email</h1>
+            <p className="mt-1 text-sm text-base-content/60">
+              If an account exists for <span className="font-medium text-base-content">{email}</span>, we sent a code. It expires in 10 minutes.
+            </p>
+          </div>
+          <FormError message={error} />
+          <OtpInput value={code} onChange={setCode} onComplete={verify} disabled={busy} />
+          <button type="button" onClick={() => verify()} disabled={busy || code.length !== 6} className="btn btn-primary h-12 min-h-0 w-full rounded-xl">
+            {busy ? <Spinner className="size-5" /> : "Verify code"}
+          </button>
+          <div className="flex items-center justify-between text-sm">
+            <button type="button" className="text-base-content/55 hover:text-base-content" onClick={() => setStep("email")}>
+              Use a different email
+            </button>
+            <button type="button" disabled={cooldown > 0 || busy} onClick={sendCode} className="font-semibold text-primary disabled:font-normal disabled:text-base-content/40">
+              {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"}
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
-      <AuthImagePattern
-        title="Let's get you back in"
-        subtitle="A quick verification code is all it takes to reset your password securely."
-      />
-    </div>
+      {step === "password" && (
+        <form onSubmit={reset} className="anim-fade space-y-4">
+          <div>
+            <h1 className="text-[1.75rem] font-bold tracking-tight">Choose a new password</h1>
+            <p className="mt-1 text-sm text-base-content/60">You'll be signed out on your other devices.</p>
+          </div>
+          <FormError message={error} />
+          <div>
+            <PasswordField id="new-password" label="New password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
+            <StrengthMeter password={password} />
+          </div>
+          <PasswordField id="confirm-password" label="Confirm password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <button type="submit" disabled={busy || !password || !confirm} className="btn btn-primary h-12 min-h-0 w-full rounded-xl">
+            {busy ? <Spinner className="size-5" /> : "Update password"}
+          </button>
+        </form>
+      )}
+    </AuthLayout>
   );
-};
-
-export default ForgotPasswordPage;
+}

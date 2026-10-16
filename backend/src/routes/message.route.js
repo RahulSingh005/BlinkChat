@@ -1,22 +1,24 @@
 import express from "express";
-import { protectRoute } from "../middleware/auth.middleware.js";
 import {
-  clearChat,
-  getMessages,
-  getUsersForSidebar,
-  sendMessage,
-  toggleBlockUser,
+  deleteMessage,
+  editMessage,
+  forwardMessage,
+  reactToMessage,
+  remindMe,
 } from "../controllers/message.controller.js";
+import { protectRoute } from "../middleware/auth.middleware.js";
+import { messageLimiter } from "../middleware/rateLimit.js";
+import { validate } from "../middleware/validate.js";
+import { editMessageSchema, forwardSchema, reactSchema, reminderSchema } from "../validation/schemas.js";
 
 const router = express.Router();
 
-router.get("/users", protectRoute, getUsersForSidebar);
+router.use(protectRoute);
 
-router.get("/:id", protectRoute, getMessages);
-
-router.post("/send/:id", protectRoute, sendMessage);
-
-router.delete("/clear/:id", protectRoute, clearChat);
-router.put("/block/:id", protectRoute, toggleBlockUser);
+router.patch("/:id", validate(editMessageSchema), editMessage);
+router.delete("/:id", deleteMessage);
+router.post("/:id/react", validate(reactSchema), reactToMessage);
+router.post("/:id/forward", messageLimiter, validate(forwardSchema), forwardMessage);
+router.post("/:id/remind", validate(reminderSchema), remindMe);
 
 export default router;

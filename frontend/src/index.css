@@ -3,124 +3,403 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: oklch(var(--b3)) transparent;
+  :root {
+    /* Updated from window.visualViewport so the app shrinks above the
+       on-screen keyboard (iOS doesn't resize the layout viewport). */
+    --app-height: 100dvh;
+
+    /* Motion tokens. Springs use CSS linear() where supported. */
+    --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+    --spring-soft: cubic-bezier(0.25, 1.15, 0.5, 1);
+  }
+  @supports (animation-timing-function: linear(0, 1)) {
+    :root {
+      --spring: linear(0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%, 0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%, 1.001 85.9%, 1);
+      --spring-soft: linear(0, 0.009, 0.037 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.4%, 1.067, 1.099 24.3%, 1.106 26%, 1.103 27.7%, 1.077 31.6%, 1.006 41.3%, 0.986 45.7%, 0.977 51.2%, 0.996 72.4%, 1);
+    }
   }
 
-  /* Belt-and-braces: on mobile, a single element even 1px wider than the
-     viewport (a long unbroken word/URL, a fixed-width decorative shape,
-     etc.) makes the *entire page* horizontally scrollable, which is far
-     more noticeable/annoying than the offending element itself. Clipping
-     at the root is the standard safety net for this class of bug. */
-  html, body {
-    max-width: 100%;
-    overflow-x: hidden;
+  html[data-font="sm"] { font-size: 14px; }
+  html[data-font="md"] { font-size: 15px; }
+  html[data-font="lg"] { font-size: 16.5px; }
+  html[data-font="xl"] { font-size: 18px; }
+
+  [data-theme="blink"] {
+    --bubble-in: 255 255 255;
+    --bubble-in-border: 226 231 241;
+    --chat-bg: 236 240 248;
+    --rail: 13 19 36;
+    color-scheme: light;
+  }
+  [data-theme="blinkdark"] {
+    --bubble-in: 27 34 52;
+    --bubble-in-border: 38 47 70;
+    --chat-bg: 9 13 23;
+    --rail: 6 9 18;
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-base-200 text-base-content antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  #root {
+    min-height: 100%;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(var(--bc) / 0.18) transparent;
+  }
+
+  ::selection {
+    background: oklch(var(--p) / 0.22);
+  }
+
+  :focus-visible {
+    outline: 2px solid oklch(var(--p));
+    outline-offset: 2px;
+  }
+
+  button,
+  a,
+  [role="button"],
+  label {
+    touch-action: manipulation; /* no 300ms tap delay */
+  }
+
+  /* iOS Safari zooms the page when a focused field's font is < 16px. */
+  @media (pointer: coarse) {
+    input,
+    textarea,
+    select {
+      font-size: max(16px, 1em) !important;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .app-shell {
+    height: var(--app-height);
+  }
+
+  .icon-btn {
+    @apply inline-flex size-10 shrink-0 items-center justify-center rounded-full text-base-content/70 transition hover:bg-base-content/[0.06] hover:text-base-content active:scale-95 disabled:pointer-events-none disabled:opacity-40;
+  }
+  .icon-btn-sm {
+    @apply size-8;
+  }
+
+  .chip {
+    @apply inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-base-200 px-3 text-[0.8125rem] font-medium text-base-content/70 transition hover:bg-base-300;
+  }
+  .chip-active {
+    @apply bg-primary text-primary-content hover:bg-primary;
+  }
+
+  .menu-item {
+    @apply flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-base-content transition hover:bg-base-content/[0.06] active:bg-base-content/10 disabled:opacity-50;
+  }
+  .menu-item-danger {
+    @apply text-error hover:bg-error/10;
+  }
+
+  .field {
+    @apply h-12 w-full rounded-xl border border-base-300 bg-base-200/60 px-4 text-[0.95rem] outline-none transition placeholder:text-base-content/40 focus:border-primary focus:bg-base-100 focus:ring-4 focus:ring-primary/15;
+  }
+  .field-label {
+    @apply mb-1.5 block text-sm font-medium text-base-content/80;
+  }
+
+  .surface {
+    @apply rounded-2xl border border-base-300/70 bg-base-100 shadow-soft;
+  }
+
+  .section-title {
+    @apply px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50;
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 }
 
 @layer utilities {
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 5px;
+  .no-scrollbar {
+    scrollbar-width: none;
   }
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: oklch(var(--b3));
-    border-radius: 9999px;
+  .text-balance {
+    text-wrap: balance;
+  }
+  .overflow-anchor-none {
+    overflow-anchor: none;
   }
 }
 
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+/* ---- Chat wallpapers ---------------------------------------------------- */
+.wallpaper-plain {
+  background-color: rgb(var(--chat-bg));
 }
-.animate-fade-in {
-  animation: fade-in 0.4s ease-out;
+.wallpaper-doodle {
+  background-color: rgb(var(--chat-bg));
+  background-size: 240px 240px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='%233B5BFD' stroke-opacity='.09' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 28a7 7 0 0 1 7-7h16a7 7 0 0 1 7 7v9a7 7 0 0 1-7 7H35l-7 6v-6.3A7 7 0 0 1 22 37z'/%3E%3Cpath d='M178 52c-5-4.2-9.5-7.6-9.5-12a5.2 5.2 0 0 1 9.5-3 5.2 5.2 0 0 1 9.5 3c0 4.4-4.5 7.8-9.5 12z'/%3E%3Cpath d='M112 98l3 6.2 6.8 1-4.9 4.7 1.2 6.7-6.1-3.2-6.1 3.2 1.2-6.7-4.9-4.7 6.8-1z'/%3E%3Cpath d='M56 150l-9 12h7l-2.5 10 9-12h-7z'/%3E%3Cpath d='M190 160v14M183 167h14'/%3E%3Ccircle cx='128' cy='204' r='5'/%3E%3Ccircle cx='30' cy='212' r='2'/%3E%3Ccircle cx='212' cy='112' r='2.5'/%3E%3Cpath d='M150 140a9 9 0 1 0 9 9M159 140v9h-9' /%3E%3Cpath d='M74 72h12M80 66v12'/%3E%3C/svg%3E");
 }
-
-@keyframes message-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+[data-theme="blinkdark"] .wallpaper-doodle {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='%23E6E9F2' stroke-opacity='.045' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 28a7 7 0 0 1 7-7h16a7 7 0 0 1 7 7v9a7 7 0 0 1-7 7H35l-7 6v-6.3A7 7 0 0 1 22 37z'/%3E%3Cpath d='M178 52c-5-4.2-9.5-7.6-9.5-12a5.2 5.2 0 0 1 9.5-3 5.2 5.2 0 0 1 9.5 3c0 4.4-4.5 7.8-9.5 12z'/%3E%3Cpath d='M112 98l3 6.2 6.8 1-4.9 4.7 1.2 6.7-6.1-3.2-6.1 3.2 1.2-6.7-4.9-4.7 6.8-1z'/%3E%3Cpath d='M56 150l-9 12h7l-2.5 10 9-12h-7z'/%3E%3Cpath d='M190 160v14M183 167h14'/%3E%3Ccircle cx='128' cy='204' r='5'/%3E%3Ccircle cx='30' cy='212' r='2'/%3E%3Ccircle cx='212' cy='112' r='2.5'/%3E%3Cpath d='M150 140a9 9 0 1 0 9 9M159 140v9h-9' /%3E%3Cpath d='M74 72h12M80 66v12'/%3E%3C/svg%3E");
 }
-.animate-message-in {
-  animation: message-in 0.25s ease-out;
-}
-
-@keyframes scale-in {
-  from { opacity: 0; transform: scale(0.95) translateY(4px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-.animate-scale-in {
-  animation: scale-in 0.2s ease-out;
+.wallpaper-gradient {
+  background-color: rgb(var(--chat-bg));
+  background-image:
+    radial-gradient(at 0% 0%, oklch(var(--p) / 0.1) 0, transparent 55%),
+    radial-gradient(at 100% 100%, oklch(var(--s) / 0.1) 0, transparent 50%);
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-12px); }
+/* ---- Message content ---------------------------------------------------- */
+.msg-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.42;
 }
-.animate-float {
-  animation: float 6s ease-in-out infinite;
+.msg-text a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
 }
-.animate-float-delayed {
-  animation: float 6s ease-in-out 2s infinite;
+.msg-text code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 0.05em 0.35em;
+  border-radius: 0.35rem;
+  background: oklch(var(--bc) / 0.08);
+}
+.msg-out .msg-text code {
+  background: rgb(255 255 255 / 0.18);
+}
+.msg-text pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  padding: 0.5rem 0.65rem;
+  margin: 0.15rem 0;
+  border-radius: 0.6rem;
+  background: oklch(var(--bc) / 0.07);
+}
+.msg-out .msg-text pre {
+  background: rgb(255 255 255 / 0.14);
+}
+.msg-big-emoji {
+  font-size: 2.6rem;
+  line-height: 1.15;
 }
 
-@keyframes bounce-subtle {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-.animate-bounce-subtle {
-  animation: bounce-subtle 2s ease-in-out infinite;
-}
-
-@keyframes pulse-slow {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-.animate-pulse-slow {
-  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes typing-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30% { transform: translateY(-4px); opacity: 1; }
-}
 .typing-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: oklch(var(--bc) / 0.5);
-  animation: typing-bounce 1.4s ease-in-out infinite;
+  @apply inline-block size-1.5 rounded-full bg-base-content/60 animate-typing;
 }
 
-.bg-mesh {
-  background-color: oklch(var(--b2));
-  background-image:
-    radial-gradient(at 20% 20%, oklch(var(--p) / 0.12) 0px, transparent 50%),
-    radial-gradient(at 80% 10%, oklch(var(--s) / 0.1) 0px, transparent 50%),
-    radial-gradient(at 60% 80%, oklch(var(--a) / 0.08) 0px, transparent 50%);
+.avatar-tint {
+  background-color: oklch(0.93 0.045 var(--h));
+  color: oklch(0.43 0.12 var(--h));
+}
+[data-theme="blinkdark"] .avatar-tint {
+  background-color: oklch(0.33 0.06 var(--h));
+  color: oklch(0.88 0.07 var(--h));
 }
 
-[data-theme="dark"] .bg-mesh {
-  background-image:
-    radial-gradient(at 15% 10%, oklch(var(--p) / 0.22) 0px, transparent 55%),
-    radial-gradient(at 85% 0%, oklch(var(--s) / 0.16) 0px, transparent 50%),
-    radial-gradient(at 50% 100%, oklch(var(--a) / 0.14) 0px, transparent 55%);
+/* ---- Motion ----------------------------------------------------------------
+   Purposeful only: things enter where they come from, state changes are
+   visible, nothing loops for decoration. All of it is disabled by
+   prefers-reduced-motion above. */
+
+@keyframes bc-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bc-in-left {
+  from { opacity: 0; transform: translateX(-10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bc-cascade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bc-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bc-scale-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bc-sheet { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes bc-drawer { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes bc-bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+@keyframes bc-reaction {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes bc-ping-once {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes bc-shimmer { to { background-position-x: -200%; } }
+@keyframes bc-draw { from { stroke-dashoffset: 16; } to { stroke-dashoffset: 0; } }
+@keyframes bc-blink {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  45% { transform: scale(0.82); opacity: 0.55; }
+}
+@keyframes bc-ring {
+  0% { transform: scale(1); opacity: 0.45; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+@keyframes bc-wave {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+@keyframes bc-flash {
+  0%, 100% { background-color: transparent; }
+  25% { background-color: oklch(var(--p) / 0.14); }
+}
+@keyframes bc-slide-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
 }
 
-/* ---- Adjustable font sizing (Settings > Font Size) ----
-   NOTE: data-font-size is set on the app's root <div> in App.jsx, not on
-   <html>, so these must be plain attribute selectors (not :root) or they
-   never match and the setting silently does nothing. */
-[data-font-size="sm"] { font-size: 14px; }
-[data-font-size="md"] { font-size: 16px; }
-[data-font-size="lg"] { font-size: 18px; }
-[data-font-size="xl"] { font-size: 20px; }
+.anim-pop { animation: bc-pop 0.42s var(--spring) both; }
+.anim-in-left { animation: bc-in-left 0.32s var(--ease-out) both; }
+.anim-cascade { animation: bc-cascade 0.38s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 22ms); }
+.anim-fade { animation: bc-fade 0.2s ease-out both; }
+.anim-scale-in { animation: bc-scale-in 0.22s var(--spring-soft) both; }
+.anim-sheet { animation: bc-sheet 0.38s var(--spring-soft) both; }
+.anim-drawer { animation: bc-drawer 0.32s var(--ease-out) both; }
+.anim-bump { animation: bc-bump 0.32s var(--spring) both; }
+.anim-reaction { animation: bc-reaction 0.4s var(--spring) both; }
+.anim-slide-down { animation: bc-slide-down 0.24s var(--ease-out) both; }
+.anim-flash { animation: bc-flash 1.6s ease-in-out; }
 
-[data-font-size="sm"] .chat-bubble-text { font-size: 0.8125rem; }
-[data-font-size="md"] .chat-bubble-text { font-size: 0.875rem; }
-[data-font-size="lg"] .chat-bubble-text { font-size: 1rem; }
-[data-font-size="xl"] .chat-bubble-text { font-size: 1.125rem; }
+.ping-once::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: inherit;
+  animation: bc-ping-once 0.9s var(--ease-out) 1 forwards;
+}
+
+.skeleton-line {
+  border-radius: 0.5rem;
+  background: linear-gradient(
+    90deg,
+    oklch(var(--bc) / 0.06) 0%,
+    oklch(var(--bc) / 0.11) 18%,
+    oklch(var(--bc) / 0.06) 36%
+  );
+  background-size: 200% 100%;
+  animation: bc-shimmer 1.4s linear infinite;
+}
+
+.tick-draw path {
+  stroke-dasharray: 16;
+  animation: bc-draw 0.35s var(--ease-out) both;
+}
+
+/* Scroll reveal (landing page). Content stays visible without JS/motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-reveal]:not(.revealed) { opacity: 0; transform: translateY(14px); }
+  .js [data-reveal].revealed { animation: bc-cascade 0.55s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 60ms); }
+}
+
+.blink-bolt { transform-origin: 50% 50%; transform-box: fill-box; animation: bc-blink 1.1s var(--ease-in-out) infinite; }
+.ring-wave { animation: bc-ring 1.8s var(--ease-out) infinite; }
+.wave-bar { transform-origin: center; animation: bc-wave 1s ease-in-out infinite; }
+
+/* View Transitions: chat open/close on phones slides like a native stack,
+   the active chat pane cross-fades on larger screens. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.28s;
+    animation-timing-function: var(--ease-out);
+  }
+  html[data-nav="forward"]::view-transition-old(root) { animation-name: bc-vt-out-left; }
+  html[data-nav="forward"]::view-transition-new(root) { animation-name: bc-vt-in-right; }
+  html[data-nav="back"]::view-transition-old(root) { animation-name: bc-vt-out-right; }
+  html[data-nav="back"]::view-transition-new(root) { animation-name: bc-vt-in-left; }
+  ::view-transition-group(*) { animation-duration: 0.32s; animation-timing-function: var(--ease-out); }
+  ::view-transition-old(chat-pane) { animation: bc-fade 0.14s ease-in reverse both; }
+  ::view-transition-new(chat-pane) { animation: bc-cascade 0.26s var(--ease-out) both; }
+}
+/* Theme switch: a circular reveal driven from JS; skip the default fade. */
+html.theme-switching::view-transition-old(root),
+html.theme-switching::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.theme-switching::view-transition-old(root) { z-index: 1; }
+html.theme-switching::view-transition-new(root) { z-index: 2; }
+
+@keyframes bc-vt-out-left { to { transform: translateX(-28%); opacity: 0.6; } }
+@keyframes bc-vt-in-right { from { transform: translateX(100%); } }
+@keyframes bc-vt-out-right { to { transform: translateX(100%); } }
+@keyframes bc-vt-in-left { from { transform: translateX(-28%); opacity: 0.6; } }
+html[data-nav="back"]::view-transition-old(root) { z-index: 2; }
+
+/* ---- Third-party: emoji picker ------------------------------------------ */
+.EmojiPickerReact.epr-main {
+  --epr-bg-color: oklch(var(--b1));
+  --epr-category-label-bg-color: oklch(var(--b1) / 0.96);
+  --epr-text-color: oklch(var(--bc));
+  --epr-hover-bg-color: oklch(var(--b2));
+  --epr-focus-bg-color: oklch(var(--p) / 0.14);
+  --epr-search-input-bg-color: oklch(var(--b2));
+  --epr-search-input-bg-color-active: oklch(var(--b2));
+  --epr-highlight-color: oklch(var(--p));
+  --epr-picker-border-color: transparent;
+  --epr-picker-border-radius: 1rem;
+  --epr-reactions-bg-color: oklch(var(--b1));
+  font-family: inherit !important;
+}
+
+/* react-hot-toast: respect the theme */
+.bc-toast {
+  background: oklch(var(--b1)) !important;
+  color: oklch(var(--bc)) !important;
+  border: 1px solid oklch(var(--b3));
+  box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.3) !important;
+  border-radius: 0.9rem !important;
+  font-size: 0.875rem;
+}

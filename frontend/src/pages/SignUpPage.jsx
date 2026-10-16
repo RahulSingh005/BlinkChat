@@ -1,261 +1,94 @@
 import { useState } from "react";
-import { useAuthStore } from "../store/useAuthStore";
-import { ArrowLeft, Eye, EyeOff, Loader2, Lock, Mail, MessageSquare, Sparkles, User } from "lucide-react";
 import { Link } from "react-router-dom";
-import AuthImagePattern from "../components/AuthImagePattern.jsx";
-import GoogleAuthButton from "../components/GoogleAuthButton";
-import toast from "react-hot-toast";
+import AuthLayout from "../components/auth/AuthLayout";
+import { Divider, FormError, PasswordField, StrengthMeter, TextField } from "../components/auth/Fields";
+import GoogleButton from "../components/auth/GoogleButton";
+import Spinner from "../components/ui/Spinner";
+import { errorMessage } from "../lib/api";
+import { useAuthStore } from "../store/useAuthStore";
+import { useGoogleEnabled } from "../store/useConfigStore";
 
-// Simple password strength checker
-const getPasswordStrength = (password) => {
-  if (!password) return "";
-  if (password.length < 6) return "Weak";
-  if (password.match(/[A-Z]/) && password.match(/[0-9]/) && password.length >= 8) return "Strong";
-  return "Medium";
-};
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-const SignUpPage = () => {
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    password: "",
-  });
-  const [errors, setErrors] = useState({});
-  const { signup, isSigningUp } = useAuthStore();
+export default function SignUpPage() {
+  const [form, setForm] = useState({ fullName: "", email: "", password: "" });
+  const [touched, setTouched] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const google = useGoogleEnabled();
 
-  const validateForm = () => {
-    const errs = {};
-    if (!formData.fullName.trim()) errs.fullName = "Full name is required";
-    if (!formData.email.trim()) errs.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) errs.email = "Invalid email format";
-    if (!formData.password) errs.password = "Password is required";
-    else if (formData.password.length < 6) errs.password = "Password must be at least 6 characters";
-    setErrors(errs);
-    if (Object.keys(errs).length) {
-      Object.values(errs).forEach((msg) => toast.error(msg));
-      return false;
-    }
-    return true;
+  const errors = {
+    fullName: !form.fullName.trim() ? "Tell us your name" : "",
+    email: !EMAIL.test(form.email.trim()) ? "Enter a valid email address" : "",
+    password: form.password.length < 6 ? "Use at least 6 characters" : "",
   };
+  const valid = !errors.fullName && !errors.email && !errors.password;
 
-  const handleSubmit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (validateForm()) signup(formData);
+    setTouched({ fullName: true, email: true, password: true });
+    if (!valid) return;
+    setError("");
+    setBusy(true);
+    try {
+      await useAuthStore.getState().signup({ ...form, fullName: form.fullName.trim(), email: form.email.trim() });
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't create your account. Please try again."));
+      setBusy(false);
+    }
   };
 
-  const passwordStrength = getPasswordStrength(formData.password);
-  const strengthBars = { Weak: 1, Medium: 2, Strong: 3 }[passwordStrength] || 0;
+  const field = (key) => ({
+    value: form[key],
+    onChange: (e) => setForm({ ...form, [key]: e.target.value }),
+    onBlur: () => setTouched((t) => ({ ...t, [key]: true })),
+    error: touched[key] ? errors[key] : "",
+  });
 
   return (
-    <div className="min-h-dvh grid lg:grid-cols-2 bg-mesh relative overflow-hidden">
-      <div className="absolute -top-24 -right-24 w-72 h-72 bg-secondary/20 rounded-full blur-3xl animate-float pointer-events-none" />
-      <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-primary/20 rounded-full blur-3xl animate-float-delayed pointer-events-none" />
+    <AuthLayout>
+      <h1 className="text-[1.75rem] font-bold tracking-tight">Create your account</h1>
+      <p className="mt-1 text-sm text-base-content/60">Free, no phone number needed.</p>
 
-      {/* Left side */}
-      <div className="relative z-10 flex flex-col justify-center items-center p-4 sm:p-8 pt-12">
-        <Link
-          to="/"
-          className="absolute top-6 left-6 inline-flex items-center gap-2 text-sm font-medium text-base-content/60 hover:text-primary transition-colors"
-        >
-          <ArrowLeft className="size-4" /> Back to home
-        </Link>
-
-        <div className="w-full max-w-sm space-y-6 animate-fade-in">
-          <div className="bg-base-100/70 backdrop-blur-xl border border-base-300/60 rounded-3xl shadow-2xl shadow-primary/5 p-6 sm:p-8">
-            {/* Logo & Heading */}
-            <div className="text-center mb-6">
-              <div className="flex flex-col items-center gap-2 group">
-                <div className="size-12 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/30 group-hover:scale-105 transition-transform">
-                  <MessageSquare className="size-6 text-primary-content" />
-                </div>
-                <h1 className="text-2xl font-bold mt-3 tracking-tight">
-                  Join <span className="text-primary">BlinkChat</span>
-                </h1>
-                <p className="text-base-content/60 text-sm flex items-center gap-1.5">
-                  <Sparkles className="size-3.5 text-secondary" /> Create your free account
-                </p>
-              </div>
-            </div>
-
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4" aria-label="Sign up form">
-              {/* Full Name */}
-              <div className="form-control">
-                <label className="label" htmlFor="fullName">
-                  <span className="label-text font-medium text-sm">Full Name</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User className="size-4 text-base-content/40" />
-                  </div>
-                  <input
-                    id="fullName"
-                    type="text"
-                    className={`input input-bordered w-full pl-10 text-sm rounded-xl focus:input-primary ${errors.fullName ? "input-error" : ""}`}
-                    placeholder="John Doe"
-                    value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    aria-required="true"
-                    aria-invalid={!!errors.fullName}
-                  />
-                </div>
-                {errors.fullName && <span className="text-error text-xs mt-1">{errors.fullName}</span>}
-              </div>
-
-              {/* Email */}
-              <div className="form-control">
-                <label className="label" htmlFor="email">
-                  <span className="label-text font-medium text-sm">Email</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="size-4 text-base-content/40" />
-                  </div>
-                  <input
-                    id="email"
-                    type="email"
-                    className={`input input-bordered w-full pl-10 text-sm rounded-xl focus:input-primary ${errors.email ? "input-error" : ""}`}
-                    placeholder="you@example.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    aria-required="true"
-                    aria-invalid={!!errors.email}
-                  />
-                </div>
-                {errors.email && <span className="text-error text-xs mt-1">{errors.email}</span>}
-              </div>
-
-              {/* Password */}
-              <div className="form-control">
-                <label className="label" htmlFor="password">
-                  <span className="label-text font-medium text-sm">Password</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="size-4 text-base-content/40" />
-                  </div>
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    className={`input input-bordered w-full pl-10 text-sm rounded-xl focus:input-primary ${errors.password ? "input-error" : ""}`}
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    aria-required="true"
-                    aria-invalid={!!errors.password}
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                    onClick={() => setShowPassword(!showPassword)}
-                    tabIndex={0}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="size-4 text-base-content/40" />
-                    ) : (
-                      <Eye className="size-4 text-base-content/40" />
-                    )}
-                  </button>
-                </div>
-
-                {formData.password && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    {[1, 2, 3].map((i) => (
-                      <span
-                        key={i}
-                        className={`h-1.5 flex-1 rounded-full transition-colors ${
-                          i <= strengthBars
-                            ? strengthBars === 3
-                              ? "bg-success"
-                              : strengthBars === 2
-                              ? "bg-warning"
-                              : "bg-error"
-                            : "bg-base-300"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-center justify-between mt-1">
-                  {errors.password && <span className="text-error text-xs">{errors.password}</span>}
-                  {formData.password && (
-                    <span
-                      className={`text-xs ml-auto ${
-                        passwordStrength === "Strong"
-                          ? "text-success"
-                          : passwordStrength === "Medium"
-                          ? "text-warning"
-                          : "text-error"
-                      }`}
-                    >
-                      {passwordStrength} password
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Submit */}
-              <button
-                type="submit"
-                className="btn btn-primary w-full text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30"
-                disabled={isSigningUp}
-                aria-disabled={isSigningUp}
-              >
-                {isSigningUp ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  "Create Account"
-                )}
-              </button>
-            </form>
-
-            <div className="flex items-center gap-3 my-5">
-              <div className="h-px flex-1 bg-base-300" />
-              <span className="text-xs text-base-content/40 font-medium">OR</span>
-              <div className="h-px flex-1 bg-base-300" />
-            </div>
-
-            <GoogleAuthButton label="Sign up with Google" />
-
-            {/* Terms & Privacy */}
-            <div className="text-xs text-base-content/60 text-center mt-4">
-              By signing up, you agree to our{" "}
-              <a href="/terms" className="link link-primary" tabIndex={0}>
-                Terms
-              </a>{" "}
-              and{" "}
-              <a href="/privacy" className="link link-primary" tabIndex={0}>
-                Privacy Policy
-              </a>
-              .
-            </div>
-
-            {/* Already have account */}
-            <div className="text-center mt-4">
-              <p className="text-base-content/60 text-sm">
-                Already have an account?{" "}
-                <Link to="/login" className="link link-primary font-medium">
-                  Sign in
-                </Link>
-              </p>
-            </div>
+      {google && (
+        <>
+          <div className="mt-7">
+            <GoogleButton text="signup_with" />
           </div>
+          <Divider />
+        </>
+      )}
+
+      <form onSubmit={submit} className={google ? "space-y-4" : "mt-7 space-y-4"} noValidate>
+        <FormError message={error} />
+        <TextField id="fullName" label="Full name" autoComplete="name" placeholder="Ava Wilson" maxLength={60} {...field("fullName")} />
+        <TextField id="email" label="Email" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com" {...field("email")} />
+        <div>
+          <PasswordField autoComplete="new-password" placeholder="At least 6 characters" {...field("password")} />
+          <StrengthMeter password={form.password} />
         </div>
-      </div>
+        <button type="submit" disabled={busy} className="btn btn-primary h-12 min-h-0 w-full rounded-xl text-[0.95rem]">
+          {busy ? <Spinner className="size-5" /> : "Create account"}
+        </button>
+        <p className="text-center text-xs leading-relaxed text-base-content/50">
+          By continuing you agree to the{" "}
+          <Link to="/terms" className="underline underline-offset-2 hover:text-base-content">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link to="/privacy" className="underline underline-offset-2 hover:text-base-content">
+            Privacy Policy
+          </Link>
+          .
+        </p>
+      </form>
 
-      {/* Right side */}
-      <AuthImagePattern
-        title="Join BlinkChat"
-        subtitle="Connect, share, and stay in touch with your friends and community."
-      />
-    </div>
+      <p className="mt-6 text-center text-sm text-base-content/60">
+        Already have an account?{" "}
+        <Link to="/login" className="font-semibold text-primary hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </AuthLayout>
   );
-};
-
-export default SignUpPage;
+}

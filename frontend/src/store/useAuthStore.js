@@ -1,178 +1,132 @@
 import { create } from "zustand";
-import { axiosInstance } from "../lib/axios.js";
 import toast from "react-hot-toast";
-import { io } from "socket.io-client";
+import { api, onUnauthorized, setSocketIdGetter, tokenStore } from "../lib/api";
+import { disablePush, syncPushSubscription } from "../lib/push";
+import { createSocket } from "../lib/socket";
+import { storage } from "../lib/storage";
+import { myTimezone } from "../lib/time";
+import { bindRealtime, resetSessionStores } from "./realtime";
+import { useConfigStore } from "./useConfigStore";
 
-// In production the socket must point at the SAME backend as the REST API
-// (VITE_API_URL), not at "/" — "/" resolves to whatever domain is serving
-// the frontend itself (e.g. your Vercel static site), which has no backend
-// listening on /socket.io and will 404 every request.
-const BASE_URL =
-  import.meta.env.MODE === "development"
-    ? "http://localhost:5001"
-    : import.meta.env.VITE_API_URL.replace(/\/api\/?$/, "");
+export const PUSH_OWNER_KEY = "blinkchat.pushOwner";
 
-export const useAuthStore = create((set, get) => ({  
-    authUser: null,
-    isSigningUp: false,
-    isLoggingIn: false,
-    isUpdatingProfile: false,
-    isCheckingAuth: true,
-    isGoogleAuthing: false,
-    isSendingOtp: false,
-    isVerifyingOtp: false,
-    isResettingPassword: false,
-    onlineUsers: [],
-    socket: null,
+export const useAuthStore = create((set, get) => ({
+  authUser: null,
+  status: "checking", // checking | authenticated | guest
+  socket: null,
+  connection: "idle", // idle | connecting | connected | reconnecting
+  presence: {}, // userId -> { online, lastSeen, since }
 
-    checkAuth: async () => {
-        try{
-            const res = await axiosInstance.get("/auth/check");
+  checkAuth: async () => {
+    try {
+      const res = await api.get("/auth/check", { skipAuthHandler: true });
+      get()._onAuthenticated(res.data.user);
+    } catch {
+      set({ authUser: null, status: "guest" });
+    }
+  },
 
-            set ({authUser: res.data })
-            get().connectSocket();
-        }catch(error){
-            console.log("Error in checkAuth", error);
-            set({authUser: null})
-        }
-        finally{
-            set ({isCheckingAuth: false})
-        }
-    },   
+  _onAuthenticated: (user) => {
+    set({ authUser: user, status: "authenticated" });
+    get().connectSocket();
 
-    signup: async (data) => {
-        set({ isSigningUp: true });
-        try {
-          const res = await axiosInstance.post("/auth/signup", data);
-          set({ authUser: res.data });
-          toast.success("Account created successfully");
-          get().connectSocket();
-        } catch (error) {
-          toast.error(error.response.data.message);
-        } finally {
-          set({ isSigningUp: false });
-        }
-      },
-    
-    login: async (data) => {
-      set({ isLoggingIn: true });
-      try {
-        const res = await axiosInstance.post("/auth/login", data);
-        set({ authUser: res.data });
-        toast.success("Logged in successfully");
+    // Keep "their local time" accurate when people travel.
+    const tz = myTimezone();
+    if (tz && tz !== user.timezone && !storage.get("blinkchat.tzManual")) {
+      api
+        .put("/auth/profile", { timezone: tz })
+        .then((res) => set({ authUser: res.data.user }))
+        .catch(() => {});
+    }
+    if (storage.get(PUSH_OWNER_KEY) === user._id) {
+      syncPushSubscription(useConfigStore.getState().config?.vapidPublicKey);
+    }
+  },
 
-        get().connectSocket();
-      } catch (error) {
-        toast.error(error.response.data.message);
-      } finally {
-        set({ isLoggingIn: false });
-      }
-    },
+  signup: async ({ fullName, email, password }) => {
+    const res = await api.post("/auth/signup", { fullName, email, password, timezone: myTimezone() });
+    get()._onAuthenticated(res.data.user);
+    return res.data.user;
+  },
 
-    logout: async () => {
-      try {
-        await axiosInstance.post("/auth/logout");
-        set({ authUser: null });
-        toast.success("Logged out successfully");
-        get().disconnectSocket();
-      } catch (error) {
-        toast.error(error.response.data.message);
-      }
-    },
+  login: async ({ email, password }) => {
+    const res = await api.post("/auth/login", { email, password });
+    get()._onAuthenticated(res.data.user);
+    return res.data.user;
+  },
 
-    updateProfile: async (data) => {
-      set({ isUpdatingProfile: true });
-      try {
-        const res = await axiosInstance.put("/auth/update-profile", data);
-        set({ authUser: res.data });
-        toast.success("Profile updated successfully");
-      } catch (error) {
-        console.log("error in update profile:", error);
-        toast.error(error.response.data.message);
-      } finally {
-        set({ isUpdatingProfile: false });
-      }
-    },
+  googleAuth: async (credential) => {
+    const res = await api.post("/auth/google", { credential, timezone: myTimezone() });
+    get()._onAuthenticated(res.data.user);
+    return res.data.user;
+  },
 
-    googleAuth: async (credential) => {
-      set({ isGoogleAuthing: true });
-      try {
-        const res = await axiosInstance.post("/auth/google", { credential });
-        set({ authUser: res.data });
-        toast.success("Signed in with Google");
-        get().connectSocket();
-        return true;
-      } catch (error) {
-        toast.error(error.response?.data?.message || "Google sign-in failed");
-        return false;
-      } finally {
-        set({ isGoogleAuthing: false });
-      }
-    },
+  logout: async ({ everywhere = false } = {}) => {
+    // Unlink this device first so the next person here gets no notifications.
+    await disablePush().catch(() => {});
+    try {
+      await api.post(everywhere ? "/auth/logout-all" : "/auth/logout", null, { skipAuthHandler: true });
+    } catch {
+      // still clear the local session
+    }
+    get()._clearSession();
+  },
 
-    forgotPassword: async (email) => {
-      set({ isSendingOtp: true });
-      try {
-        const res = await axiosInstance.post("/auth/forgot-password", { email });
-        toast.success(res.data.message || "Verification code sent");
-        return true;
-      } catch (error) {
-        toast.error(error.response?.data?.message || "Couldn't send verification code");
-        return false;
-      } finally {
-        set({ isSendingOtp: false });
-      }
-    },
+  _clearSession: () => {
+    tokenStore.clear();
+    get().disconnectSocket();
+    resetSessionStores();
+    set({ authUser: null, status: "guest", presence: {} });
+  },
 
-    verifyResetOtp: async (email, otp) => {
-      set({ isVerifyingOtp: true });
-      try {
-        await axiosInstance.post("/auth/verify-reset-otp", { email, otp });
-        return true;
-      } catch (error) {
-        toast.error(error.response?.data?.message || "Invalid code");
-        return false;
-      } finally {
-        set({ isVerifyingOtp: false });
-      }
-    },
+  setUser: (patch) => set((s) => ({ authUser: s.authUser ? { ...s.authUser, ...patch } : s.authUser })),
 
-    resetPassword: async (email, newPassword) => {
-      set({ isResettingPassword: true });
-      try {
-        const res = await axiosInstance.post("/auth/reset-password", { email, newPassword });
-        toast.success(res.data.message || "Password reset successfully");
-        return true;
-      } catch (error) {
-        toast.error(error.response?.data?.message || "Couldn't reset password");
-        return false;
-      } finally {
-        set({ isResettingPassword: false });
-      }
-    },
+  updateProfile: async (patch) => {
+    const res = await api.put("/auth/profile", patch);
+    set({ authUser: res.data.user });
+    return res.data.user;
+  },
 
-    connectSocket: () => {
-      const { authUser } = get();
-      if (!authUser || get().socket?.connected) return;
+  changePassword: async ({ currentPassword, newPassword }) => {
+    const res = await api.put("/auth/password", { currentPassword, newPassword });
+    set({ authUser: res.data.user });
+  },
 
-      const socket = io(BASE_URL, {
-        query: {
-          userId: authUser._id,
-        },
-      });
-      socket.connect();
+  deleteAccount: async ({ password, deleteMessages }) => {
+    await api.delete("/auth/account", { data: { password, confirm: "DELETE", deleteMessages } });
+    await disablePush().catch(() => {});
+    get()._clearSession();
+  },
 
-      set({ socket: socket });
+  setPresence: (userId, value) =>
+    set((s) => ({ presence: { ...s.presence, [userId]: { ...s.presence[userId], ...value } } })),
 
-      socket.on("getOnlineUsers", (userIds) => {
-        set({ onlineUsers: userIds });
-      });
-    },
+  connectSocket: () => {
+    if (get().socket) return;
+    const socket = createSocket();
+    set({ socket, connection: "connecting" });
+    setSocketIdGetter(() => socket.id);
+    bindRealtime(socket);
+  },
 
-    disconnectSocket: () => {
-      if (get().socket?.connected) get().socket.disconnect();
-      set({ socket: null, onlineUsers: [] });
-    },
-
+  disconnectSocket: () => {
+    const socket = get().socket;
+    if (socket) {
+      socket.removeAllListeners();
+      socket.io.removeAllListeners?.();
+      socket.disconnect();
+    }
+    setSocketIdGetter(() => null);
+    set({ socket: null, connection: "idle" });
+  },
 }));
 
+export const useIsOnline = (userId) => useAuthStore((s) => Boolean(userId && s.presence[userId]?.online));
+
+// Any API call answered with 401 (expired or revoked session) signs out.
+onUnauthorized(() => {
+  const { status, _clearSession } = useAuthStore.getState();
+  if (status !== "authenticated") return;
+  _clearSession();
+  toast.error("Your session ended. Please sign in again.");
+});

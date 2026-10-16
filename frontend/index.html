@@ -1,12 +1,39 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="blink">
   <head>
     <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <title>BlinkChat — fast, thoughtful messaging</title>
+    <meta
+      name="description"
+      content="BlinkChat is a fast, private messenger with groups, voice & video calls, voice notes, smart scheduling, reminders and optional AI catch-up and translation."
+    />
+    <meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0e19" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BlinkChat</title>
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="BlinkChat" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <meta property="og:title" content="BlinkChat" />
+    <meta property="og:description" content="Fast, thoughtful messaging — groups, calls, voice notes, smart scheduling and AI catch-up." />
+    <meta property="og:type" content="website" />
+
+    <!-- Applies the saved theme before first paint (no light/dark flash). -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
+    <noscript>BlinkChat needs JavaScript to run.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

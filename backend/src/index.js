@@ -1,66 +1,48 @@
-import express from 'express';
-import dotenv from 'dotenv';
-import cookieParser from 'cookie-parser';
-import cors from 'cors';
+import { env, validateEnv } from "./config/env.js";
+import http from "node:http";
+import { createApp, isAllowedOrigin } from "./app.js";
+import { connectDB, disconnectDB } from "./lib/db.js";
+import { initPush } from "./lib/push.js";
+import { startScheduler, stopScheduler } from "./lib/scheduler.js";
+import { runMigrations } from "./migrations/index.js";
+import { createSocketServer } from "./socket/index.js";
 
-import path from "path";
+async function main() {
+  validateEnv();
+  await connectDB(env.MONGODB_URI);
+  await runMigrations();
+  initPush();
 
-import { connectDB } from './lib/db.js';
+  const app = createApp();
+  const server = http.createServer(app);
+  const io = createSocketServer(server, { isAllowedOrigin });
 
-import authRoutes from './routes/auth.route.js';
-import messageRoutes from "./routes/message.route.js";
-import { app, server } from './lib/socket.js';
+  startScheduler();
 
-
-dotenv.config();
-
-const PORT = process.env.PORT
-const __dirname = path.resolve();
-
-// Raise the body size limit so base64 profile photo / chat image uploads
-// (which are sent as JSON strings) don't get rejected with a 413 error.
-app.use(express.json({ limit: "10mb" }));
-app.use(cookieParser());
-const allowedOrigins = [
-  "http://localhost:5173",
-  process.env.CLIENT_URL,
-];
-
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true,
-}));
-
-app.use("/api/auth", authRoutes);
-app.use("/api/messages", messageRoutes);
-
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../frontend/dist")));
-
-app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend/dist", "index.html"));
+  server.listen(env.PORT, () => {
+    console.log(`[server] BlinkChat API listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
   });
-  app.get("/login", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend/dist", "index.html"));
-  });
-  app.get("/signup", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend/dist", "index.html"));
-  });
-  app.get("/profile", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend/dist", "index.html"));
-  });
-  app.get("/settings", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend/dist", "index.html"));
-  });
+
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[server] ${signal} received, shutting down gracefully...`);
+    stopScheduler();
+    io.close();
+    server.close();
+    await disconnectDB().catch(() => {});
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
-server.listen(PORT, () => {
-  console.log('Server is running on port:' + PORT);
-  connectDB();
+process.on("unhandledRejection", (reason) => {
+  console.error("[server] Unhandled promise rejection:", reason);
+});
+
+main().catch((err) => {
+  console.error("[server] Failed to start:", err.message);
+  process.exit(1);
 });

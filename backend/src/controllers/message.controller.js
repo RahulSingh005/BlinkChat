@@ -1,131 +1,126 @@
-import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
-import cloudinary from "../lib/cloudinary.js";
-import { getReceiverSocketId, io } from "../lib/socket.js";
+import Reminder from "../models/reminder.model.js";
+import User from "../models/user.model.js";
+import { badRequest, forbidden } from "../lib/errors.js";
+import { emitToUser } from "../lib/realtime.js";
+import { messagePreview, serializeMessage } from "../lib/serializers.js";
+import { deleteStoredFile } from "../lib/storage.js";
+import { idStr, sameId, toObjectId } from "../lib/utils.js";
+import { getConversationForMember, isAdmin } from "../services/conversation.service.js";
+import {
+  EDIT_WINDOW_MS,
+  assertCanSend,
+  broadcastMessageUpdate,
+  createMessage,
+  getMessageForMember,
+} from "../services/message.service.js";
+import { serializeReminder } from "./reminder.controller.js";
 
-export const getUsersForSidebar = async (req, res) => {
-    try {
-      const loggedInUserId = req.user._id;
-      const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select(
-        "-password -blockedUsers"
-      );
-  
-      res.status(200).json(filteredUsers);
-    } catch (error) {
-      console.error("Error in getUsersForSidebar: ", error.message);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  };
+const MAX_PENDING_REMINDERS = 100;
 
-export const getMessages = async (req, res) => {
-    try {
-      const { id: userToChatId } = req.params;
-      const myId = req.user._id;
-  
-      const messages = await Message.find({
-        $or: [
-          { senderId: myId, receiverId: userToChatId },
-          { senderId: userToChatId, receiverId: myId },
-        ],
-      });
-  
-      res.status(200).json(messages);
-    } catch (error) {
-      console.log("Error in getMessages controller: ", error.message);
-      res.status(500).json({ error: "Internal server error" });
-    }
+export const editMessage = async (req, res) => {
+  const { message, conv } = await getMessageForMember(req.params.id, req.user._id);
+  if (!sameId(message.sender, req.user._id) || message.type !== "user") throw forbidden("You can only edit your own messages");
+  if (message.deletedAt) throw badRequest("This message was deleted");
+  if (Date.now() - message.createdAt.getTime() > EDIT_WINDOW_MS) throw badRequest("Messages can only be edited within 24 hours");
+  if (message.forwarded) throw badRequest("Forwarded messages can't be edited");
+
+  const text = req.data.text;
+  if (text === message.text) return res.json({ message: serializeMessage(message) });
+
+  message.text = text;
+  message.editedAt = new Date();
+  message.translations = undefined;
+  await message.save();
+  broadcastMessageUpdate(conv, message);
+  res.json({ message: serializeMessage(message) });
 };
 
-export const clearChat = async (req, res) => {
-    try {
-      const { id: otherUserId } = req.params;
-      const myId = req.user._id;
+/** scope=me hides it on my devices; scope=everyone tombstones it for all. */
+export const deleteMessage = async (req, res) => {
+  const scope = req.query.scope === "everyone" ? "everyone" : "me";
+  const { message, conv } = await getMessageForMember(req.params.id, req.user._id);
 
-      await Message.deleteMany({
-        $or: [
-          { senderId: myId, receiverId: otherUserId },
-          { senderId: otherUserId, receiverId: myId },
-        ],
-      });
-
-      res.status(200).json({ message: "Chat cleared" });
-    } catch (error) {
-      console.log("Error in clearChat controller: ", error.message);
-      res.status(500).json({ error: "Internal server error" });
-    }
-};
-
-export const toggleBlockUser = async (req, res) => {
-    try {
-      const { id: targetUserId } = req.params;
-      const me = req.user;
-
-      if (String(targetUserId) === String(me._id)) {
-        return res.status(400).json({ message: "You can't block yourself" });
-      }
-
-      const isBlocked = me.blockedUsers?.some((id) => String(id) === String(targetUserId));
-
-      const updatedUser = await User.findByIdAndUpdate(
-        me._id,
-        isBlocked
-          ? { $pull: { blockedUsers: targetUserId } }
-          : { $addToSet: { blockedUsers: targetUserId } },
-        { new: true }
-      ).select("-password");
-
-      res.status(200).json({
-        blocked: !isBlocked,
-        blockedUsers: updatedUser.blockedUsers,
-      });
-    } catch (error) {
-      console.log("Error in toggleBlockUser controller: ", error.message);
-      res.status(500).json({ error: "Internal server error" });
-    }
-};
-
-export const sendMessage = async (req, res) => {
-    try {
-        const { text, image } = req.body;
-        const { id: receiverId } = req.params;
-        const senderId = req.user._id;
-
-        const receiver = await User.findById(receiverId);
-        if (receiver?.blockedUsers?.some((id) => String(id) === String(senderId))) {
-          return res.status(403).json({ message: "You can't message this user" });
-        }
-        if (req.user.blockedUsers?.some((id) => String(id) === String(receiverId))) {
-          return res.status(403).json({ message: "Unblock this user to send a message" });
-        }
-
-    let imageUrl;
-        if (image) {
-          // Upload base64 image to cloudinary
-          const uploadResponse = await cloudinary.uploader.upload(image);
-          imageUrl = uploadResponse.secure_url;
-    }
-    
-    const newMessage = new Message({
-        senderId,
-        receiverId,
-        text,
-        image: imageUrl,
-    });
-
-    await newMessage.save();
-
-    // real time functionality with socket io
-    const receiverSocketId = getReceiverSocketId(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("newMessage", newMessage);
-    }
-
-
-
-    res.status(201).json(newMessage);
-
-    } catch (error) {
-    console.log("Error in sendMessage controller: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+  if (scope === "me") {
+    await Message.updateOne({ _id: message._id }, { $addToSet: { hiddenFor: toObjectId(req.user._id) } });
+    emitToUser(req.user._id, "message:hidden", { messageId: idStr(message._id), conversationId: idStr(conv._id) });
+    return res.json({ hidden: true });
   }
-}
+
+  const own = sameId(message.sender, req.user._id);
+  const moderator = conv.type === "group" && isAdmin(conv, req.user._id);
+  if (message.type !== "user" || !(own || moderator)) throw forbidden("You can only delete your own messages for everyone");
+  if (message.deletedAt) return res.json({ message: serializeMessage(message) });
+
+  message.attachments.forEach((a) => deleteStoredFile(a));
+  message.deletedAt = new Date();
+  message.text = "";
+  message.attachments = [];
+  message.reactions = [];
+  message.replyTo = null;
+  message.transcript = undefined;
+  message.translations = undefined;
+  await message.save();
+  broadcastMessageUpdate(conv, message);
+  res.json({ message: serializeMessage(message) });
+};
+
+/** One reaction per person (WhatsApp-style); same emoji again removes it. */
+export const reactToMessage = async (req, res) => {
+  const { message, conv } = await getMessageForMember(req.params.id, req.user._id);
+  if (message.deletedAt || message.type !== "user") throw badRequest("You can't react to this message");
+
+  const me = toObjectId(req.user._id);
+  const current = message.reactions.find((r) => sameId(r.user, me));
+  await Message.updateOne({ _id: message._id }, { $pull: { reactions: { user: me } } });
+  if (current?.emoji !== req.data.emoji) {
+    await Message.updateOne({ _id: message._id }, { $push: { reactions: { user: me, emoji: req.data.emoji, at: new Date() } } });
+  }
+
+  const fresh = await Message.findById(message._id);
+  broadcastMessageUpdate(conv, fresh);
+  res.json({ message: serializeMessage(fresh) });
+};
+
+export const forwardMessage = async (req, res) => {
+  const { message } = await getMessageForMember(req.params.id, req.user._id);
+  if (message.deletedAt || message.type !== "user") throw badRequest("This message can't be forwarded");
+
+  const results = [];
+  for (const conversationId of [...new Set(req.data.conversationIds)]) {
+    const target = await getConversationForMember(conversationId, req.user._id);
+    await assertCanSend(target, req.user._id);
+    const { message: copy } = await createMessage({
+      conversation: target,
+      senderId: req.user._id,
+      text: message.text,
+      attachments: message.attachments.map((a) => (typeof a.toObject === "function" ? a.toObject() : a)),
+      forwarded: true,
+    });
+    results.push(serializeMessage(copy));
+  }
+  res.status(201).json({ messages: results });
+};
+
+export const remindMe = async (req, res) => {
+  const { message, conv } = await getMessageForMember(req.params.id, req.user._id);
+  const { remindAt, note } = req.data;
+  const ms = remindAt.getTime() - Date.now();
+  if (ms < 30 * 1000) throw badRequest("Pick a time at least a minute from now");
+  if (ms > 365 * 24 * 60 * 60 * 1000) throw badRequest("Reminders can be set up to a year ahead");
+
+  const pending = await Reminder.countDocuments({ user: req.user._id, status: "pending" });
+  if (pending >= MAX_PENDING_REMINDERS) throw badRequest("You have too many pending reminders");
+
+  const sender = await User.findById(message.sender).select("fullName").lean();
+  const reminder = await Reminder.create({
+    user: req.user._id,
+    conversation: conv._id,
+    message: message._id,
+    remindAt,
+    note,
+    preview: { text: messagePreview(message), senderName: sender?.fullName || "Deleted account" },
+  });
+  emitToUser(req.user._id, "reminders:changed", {});
+  res.status(201).json({ reminder: serializeReminder(reminder.toObject()) });
+};
