@@ -1,25 +1,22 @@
 import { useEffect, useState } from "react";
-import { LogoMark } from "../ui/Logo";
+import StatusScreen from "./StatusScreen";
 
 /**
  * Shown while the session is restored. Appears only if loading takes more
- * than a moment, so fast loads never flash a splash screen.
+ * than a moment, so fast loads never flash a splash screen. If the server is
+ * slow to answer (e.g. a free host waking up) it says so.
  */
 export default function BootScreen() {
-  const [show, setShow] = useState(false);
+  const [stage, setStage] = useState(0);
   useEffect(() => {
-    const t = setTimeout(() => setShow(true), 180);
-    return () => clearTimeout(t);
+    const t1 = setTimeout(() => setStage(1), 180);
+    const t2 = setTimeout(() => setStage(2), 4500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 
-  return (
-    <div className="app-shell flex flex-col items-center justify-center gap-5 bg-base-200" aria-busy="true" aria-label="Loading BlinkChat">
-      {show && (
-        <div className="anim-scale-in flex flex-col items-center gap-4">
-          <LogoMark size={56} animated className="drop-shadow-sm" />
-          <span className="text-sm font-medium text-base-content/45">Loading your chats</span>
-        </div>
-      )}
-    </div>
-  );
+  if (stage === 0) return <div className="app-shell bg-base-200" aria-busy="true" />;
+  return <StatusScreen busy title="BlinkChat" body={stage === 2 ? "Waking up the server, this can take a few seconds…" : "Getting things ready"} />;
 }

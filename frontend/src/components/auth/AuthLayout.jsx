@@ -1,8 +1,30 @@
 import { Link } from "react-router-dom";
+import { CloudOff } from "lucide-react";
+import { useConfigStore } from "../../store/useConfigStore";
 import ChatPreview from "../marketing/ChatPreview";
 import Logo from "../ui/Logo";
 
 /** Shared frame for sign in / sign up / reset: form left, product right. */
+function ServerNotice() {
+  const unreachable = useConfigStore((s) => s.unreachable);
+  if (!unreachable) return null;
+  return (
+    <div role="alert" className="anim-slide-down mb-6 flex gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-3.5 text-sm">
+      <CloudOff className="mt-0.5 size-4 shrink-0 text-warning" />
+      <div className="min-w-0">
+        <p className="font-semibold">Can't reach the BlinkChat server</p>
+        <p className="mt-0.5 text-[0.8125rem] text-base-content/65">
+          It may be waking up, try again in a moment. If you run this site, add <span className="font-mono">{window.location.origin}</span> to CLIENT_URL on the
+          backend.
+        </p>
+        <button type="button" className="mt-2 text-[0.8125rem] font-semibold text-primary hover:underline" onClick={() => window.location.reload()}>
+          Retry
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AuthLayout({ children }) {
   return (
     <div className="grid min-h-dvh bg-base-100 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
@@ -11,7 +33,10 @@ export default function AuthLayout({ children }) {
           <Logo size={34} />
         </Link>
         <div className="flex flex-1 items-center justify-center py-10">
-          <div className="anim-slide-up w-full max-w-sm">{children}</div>
+          <div className="anim-slide-up w-full max-w-sm">
+            <ServerNotice />
+            {children}
+          </div>
         </div>
         <footer className="flex justify-center gap-4 text-xs text-base-content/45">
           <Link to="/privacy" className="hover:text-base-content">

@@ -389,6 +389,11 @@
 .anim-slide-down { animation: bc-slide-down 0.24s var(--ease-out) both; }
 .anim-flash { animation: bc-flash 1.6s ease-in-out; }
 .anim-shake { animation: bc-shake 0.42s var(--ease-out) both; }
+@keyframes bc-boot-bar {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(330%); }
+}
+.boot-bar { animation: bc-boot-bar 1.15s var(--ease-in-out) infinite; }
 .anim-float-up { animation: bc-float-up 1.4s var(--ease-out) forwards; }
 .tick-read { color: oklch(var(--tick)); }
 

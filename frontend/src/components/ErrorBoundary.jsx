@@ -1,4 +1,6 @@
 import { Component } from "react";
+import { RotateCcw, TriangleAlert } from "lucide-react";
+import StatusScreen from "./layout/StatusScreen";
 
 /**
  * Last-resort boundary around the whole app: an unexpected render error
@@ -18,13 +20,17 @@ export default class ErrorBoundary extends Component {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-base-200 p-6 text-center">
-        <h1 className="text-xl font-semibold">Something went wrong</h1>
-        <p className="max-w-sm text-sm text-base-content/60">BlinkChat hit an unexpected error. Your messages are safe — reloading usually fixes it.</p>
-        <button type="button" className="btn btn-primary rounded-xl" onClick={() => window.location.reload()}>
-          Reload BlinkChat
+      <StatusScreen
+        icon={<TriangleAlert className="size-3.5" />}
+        tone="error"
+        title="Something went wrong"
+        body="BlinkChat hit an unexpected error. Your messages are safe, and reloading usually fixes it."
+        details={String(this.state.error?.message || this.state.error)}
+      >
+        <button type="button" className="btn btn-primary h-11 min-h-0 w-full rounded-xl px-6 sm:w-auto" onClick={() => window.location.reload()}>
+          <RotateCcw className="size-4" /> Reload BlinkChat
         </button>
-      </div>
+      </StatusScreen>
     );
   }
 }
