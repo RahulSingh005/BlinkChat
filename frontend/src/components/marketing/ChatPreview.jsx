@@ -32,7 +32,7 @@ export default function ChatPreview({ className = "", replayKey = 0 }) {
   const visible = SCRIPT.slice(0, step + 1).filter((s, i) => s.kind !== "typing" || i === step);
 
   return (
-    <div className={`w-full max-w-[380px] overflow-hidden rounded-[28px] border border-base-300/60 bg-base-100 text-base-content shadow-float ${className}`} aria-hidden="true">
+    <div className={`w-full max-w-[400px] overflow-hidden rounded-[28px] border border-base-300 bg-base-100 text-base-content shadow-float ${className}`} aria-hidden="true">
       <div className="flex items-center gap-3 border-b border-base-300/60 px-4 py-3">
         <Avatar name="Liam Patel" seed="liam-demo" size={38} online />
         <div className="min-w-0 flex-1">
@@ -49,7 +49,7 @@ export default function ChatPreview({ className = "", replayKey = 0 }) {
           if (s.kind === "typing") {
             return (
               <div key={`t${i}`} className="anim-in-left flex">
-                <span className="flex h-8 items-center gap-1 rounded-[16px] rounded-bl-[6px] border border-bubble-in-border/70 bg-bubble-in px-3">
+                <span className="flex h-8 items-center gap-1 rounded-[16px] rounded-bl-[6px] bg-bubble-in px-3 shadow-bubble">
                   <span className="typing-dot" />
                   <span className="typing-dot" style={{ animationDelay: "0.15s" }} />
                   <span className="typing-dot" style={{ animationDelay: "0.3s" }} />
@@ -63,7 +63,7 @@ export default function ChatPreview({ className = "", replayKey = 0 }) {
             <div key={`m${i}`} className={`flex ${out ? "justify-end anim-pop" : "anim-in-left"}`}>
               <span
                 className={`max-w-[80%] rounded-[16px] px-3 py-1.5 text-[13px] leading-snug shadow-bubble ${
-                  out ? "rounded-br-[6px] bg-primary text-primary-content" : "rounded-bl-[6px] border border-bubble-in-border/70 bg-bubble-in"
+                  out ? "rounded-br-[6px] bg-bubble-out text-bubble-out-content" : "rounded-bl-[6px] bg-bubble-in"
                 }`}
               >
                 {s.text}

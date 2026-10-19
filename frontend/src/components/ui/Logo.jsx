@@ -26,7 +26,7 @@ export default function Logo({ size = 32, withText = true, className = "" }) {
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
       <LogoMark size={size} />
-      {withText && <span className="text-[1.05rem] font-bold tracking-tight">BlinkChat</span>}
+      {withText && <span className="text-[1.05rem] font-bold leading-none tracking-tight">BlinkChat</span>}
     </span>
   );
 }

@@ -24,7 +24,8 @@ export default {
         "bubble-out": "oklch(var(--bo) / <alpha-value>)",
         "bubble-out-content": "oklch(var(--boc) / <alpha-value>)",
         "chat-bg": "rgb(var(--chat-bg) / <alpha-value>)",
-        rail: "rgb(var(--rail) / <alpha-value>)",
+        rail: "var(--rail-bg)",
+        ink: "rgb(var(--ink) / <alpha-value>)",
       },
       spacing: {
         header: "3.75rem", // 60px: every panel header shares this height
@@ -74,8 +75,8 @@ export default {
           neutral: "#1F2125",
           "neutral-content": "#F7F7F8",
           "base-100": "#FFFFFF",
-          "base-200": "#F2F3F5",
-          "base-300": "#E3E5E8",
+          "base-200": "#EEF1F5",
+          "base-300": "#E0E4EA",
           "base-content": "#111317",
           info: "#0EA5E9",
           success: "#16A34A",
@@ -85,7 +86,7 @@ export default {
         },
       },
       {
-        // Dark: neutral graphite (no blue cast), like modern messengers.
+        // Dark: soft charcoal greys (not pitch black), border-driven surfaces.
         blinkdark: {
           primary: "#6F86FF",
           "primary-content": "#FFFFFF",
@@ -94,11 +95,11 @@ export default {
           accent: "#A78BFA",
           "accent-content": "#140A2A",
           neutral: "#E4E4E7",
-          "neutral-content": "#18181B",
-          "base-100": "#18181B",
-          "base-200": "#111113",
-          "base-300": "#2A2A2F",
-          "base-content": "#ECECEF",
+          "neutral-content": "#1F1F1F",
+          "base-100": "#1F1F1F",
+          "base-200": "#181818",
+          "base-300": "#303030",
+          "base-content": "#EDEDED",
           info: "#60A5FA",
           success: "#34D399",
           warning: "#FBBF24",

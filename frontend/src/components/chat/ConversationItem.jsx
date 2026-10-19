@@ -68,7 +68,7 @@ function ConversationItem({ conv, meId, active, typing, draft, online, narrow, o
         onMenu(conv, { x: e.clientX, y: e.clientY });
       }}
       className={`group relative flex select-none items-center gap-3 rounded-xl px-2 py-2.5 transition-colors duration-150 ${
-        active ? "bg-base-content/[0.08]" : "hover:bg-base-content/[0.04] active:bg-base-content/[0.07]"
+        active ? "bg-primary/10 dark:bg-base-content/[0.08]" : "hover:bg-base-content/[0.04] active:bg-base-content/[0.07]"
       } ${animate ? "anim-cascade" : ""}`}
       style={animate ? { "--i": Math.min(index, 12) } : undefined}
       aria-current={active ? "page" : undefined}

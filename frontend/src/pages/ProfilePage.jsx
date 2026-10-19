@@ -227,30 +227,40 @@ export default function ProfileSection() {
               </button>
             </div>
           ) : null}
-          <div className="flex gap-2">
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (statusText.trim()) setStatus(statusText.trim(), statusEmoji);
+            }}
+          >
             <input value={statusEmoji} onChange={(e) => setStatusEmoji([...e.target.value].slice(-2).join(""))} className="field w-14 px-0 text-center text-lg" aria-label="Status emoji" />
-            <input value={statusText} onChange={(e) => setStatusText(e.target.value)} maxLength={80} placeholder="What's your status?" className="field flex-1" onKeyDown={(e) => e.key === "Enter" && statusText.trim() && setStatus(statusText.trim(), statusEmoji)} />
-          </div>
+            <div className="relative flex-1">
+              <input value={statusText} onChange={(e) => setStatusText(e.target.value)} maxLength={80} placeholder="Type your own status and press Enter" className="field pr-12" />
+              {statusText.trim() && statusText.trim() !== me.status?.text && (
+                <button type="submit" className="anim-scale-in absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg bg-primary text-primary-content" aria-label="Save status">
+                  <Check className="size-4" />
+                </button>
+              )}
+            </div>
+          </form>
           <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
             {STATUS_PRESETS.map((p) => (
-              <button key={p.text} type="button" className="chip" onClick={() => setStatus(p.text, p.emoji)}>
+              <button key={p.text} type="button" className={`chip ${me.status?.text === p.text ? "chip-active" : ""}`} onClick={() => setStatus(p.text, p.emoji)}>
                 {p.emoji} {p.text}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-base-content/60">Clear after</span>
-            <select value={clearAfter} onChange={(e) => setClearAfter(e.target.value)} className="select select-bordered select-sm rounded-lg">
+          <label className="flex items-center gap-2 text-sm text-base-content/60">
+            Clears after
+            <select value={clearAfter} onChange={(e) => setClearAfter(e.target.value)} className="select select-bordered select-sm rounded-lg text-base-content">
               {CLEAR_AFTER.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.label}
                 </option>
               ))}
             </select>
-            <button type="button" className="btn btn-primary btn-sm ml-auto rounded-lg" disabled={!statusText.trim()} onClick={() => setStatus(statusText.trim(), statusEmoji)}>
-              Set status
-            </button>
-          </div>
+          </label>
         </div>
       </Card>
 

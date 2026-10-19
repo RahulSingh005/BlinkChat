@@ -34,7 +34,7 @@ function Control({ onClick, active = false, danger = false, label, children, big
       aria-label={label}
       title={label}
       className={`flex shrink-0 items-center justify-center rounded-full transition active:scale-95 ${big ? "size-16" : "size-14"} ${
-        danger ? "bg-error text-white hover:bg-error/90" : active ? "bg-white text-neutral" : "bg-white/15 text-white backdrop-blur hover:bg-white/20"
+        danger ? "bg-error text-white hover:bg-error/90" : active ? "bg-white text-[#111317]" : "bg-white/15 text-white backdrop-blur hover:bg-white/20"
       }`}
     >
       {children}
@@ -138,7 +138,7 @@ export default function CallOverlay() {
 
   return createPortal(
     <div
-      className="anim-fade fixed inset-0 z-[85] flex flex-col overflow-hidden bg-neutral text-white md:items-center md:justify-center md:bg-black/70 md:p-6 md:backdrop-blur-sm"
+      className="anim-fade fixed inset-0 z-[85] flex flex-col overflow-hidden bg-[#141414] text-white md:items-center md:justify-center md:bg-black/70 md:p-6 md:backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={`Call with ${name}`}
@@ -216,7 +216,7 @@ export default function CallOverlay() {
         )}
 
         {audioBlocked && (
-          <button type="button" onClick={() => document.querySelectorAll("audio").forEach((a) => a.play().then(() => setAudioBlocked(false)).catch(() => {}))} className="absolute left-1/2 top-24 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-neutral shadow-float">
+          <button type="button" onClick={() => document.querySelectorAll("audio").forEach((a) => a.play().then(() => setAudioBlocked(false)).catch(() => {}))} className="absolute left-1/2 top-24 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#111317] shadow-float">
             <Volume2 className="size-4" /> Tap to turn on sound
           </button>
         )}

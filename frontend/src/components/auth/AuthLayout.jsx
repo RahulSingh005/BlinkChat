@@ -23,13 +23,15 @@ export default function AuthLayout({ children }) {
           <span>© {new Date().getFullYear()} BlinkChat</span>
         </footer>
       </div>
-      <aside className="relative hidden items-center justify-center overflow-hidden bg-rail p-12 lg:flex">
-        <div className="absolute inset-0 opacity-60 [background:radial-gradient(60%_50%_at_70%_20%,oklch(var(--p)/0.35),transparent),radial-gradient(50%_40%_at_20%_90%,oklch(var(--s)/0.22),transparent)]" />
+      <aside className="relative hidden items-center justify-center overflow-hidden border-l border-base-300/60 bg-base-200 p-12 lg:flex">
+        <div className="bg-grid absolute inset-0" />
         <div className="relative flex max-w-md flex-col items-center gap-10">
           <ChatPreview />
-          <div className="text-center text-white">
-            <p className="text-balance text-2xl font-semibold tracking-tight">Messages that arrive at the right moment.</p>
-            <p className="mt-2 text-sm text-white/60">See their local time, schedule for their morning, and catch up in seconds.</p>
+          <div className="text-center">
+            <p className="text-balance text-2xl font-semibold tracking-tight">
+              Messages that arrive at <span className="text-primary">the right moment.</span>
+            </p>
+            <p className="mt-2 text-sm text-base-content/60">See their local time, schedule for their morning, and catch up in seconds.</p>
           </div>
         </div>
       </aside>

@@ -19,7 +19,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import ChatPreview from "../components/marketing/ChatPreview";
-import Logo from "../components/ui/Logo";
+import Logo, { LogoMark } from "../components/ui/Logo";
 
 const ESSENTIALS = [
   { icon: CheckCheck, title: "Real-time, with receipts", body: "Typing indicators, delivered and read receipts — and you decide whether to share yours." },
@@ -69,9 +69,11 @@ function useReveal() {
   return ref;
 }
 
+const WRAP = "mx-auto w-full max-w-[1360px] px-5 sm:px-8 lg:px-12";
+
 function Feature({ icon: Icon, title, body, i }) {
   return (
-    <div data-reveal style={{ "--i": i }} className="rounded-2xl border border-base-300/70 bg-base-100 p-5 transition hover:border-base-300 hover:shadow-soft">
+    <div data-reveal style={{ "--i": i }} className="rounded-2xl border border-base-300 bg-base-100 p-5 transition hover:-translate-y-0.5 hover:border-primary/40">
       <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <Icon className="size-5" />
       </span>
@@ -86,22 +88,27 @@ export default function LandingPage() {
 
   return (
     <div ref={ref} className="min-h-dvh bg-base-100 text-base-content">
-      <header className="safe-top sticky top-0 z-30 border-b border-base-300/50 bg-base-100/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5">
-          <Link to="/" aria-label="BlinkChat home">
-            <Logo size={32} />
+      <header className="safe-top sticky top-0 z-30 border-b border-base-300/60 bg-base-100/85 backdrop-blur-md">
+        <div className={`${WRAP} flex h-16 items-center gap-3`}>
+          <Link to="/" aria-label="BlinkChat home" className="shrink-0">
+            <LogoMark size={32} />
           </Link>
-          <nav className="hidden items-center gap-6 text-sm text-base-content/65 md:flex">
-            <a href="#features" className="hover:text-base-content">
-              Features
-            </a>
-            <a href="#extras" className="hover:text-base-content">
-              What's different
-            </a>
-            <a href="#faq" className="hover:text-base-content">
-              FAQ
-            </a>
-          </nav>
+          <div className="flex min-w-0 items-baseline gap-8">
+            <Link to="/" className="text-[1.0625rem] font-bold leading-none tracking-tight">
+              BlinkChat
+            </Link>
+            <nav className="hidden items-baseline gap-7 text-[0.9375rem] leading-none text-base-content/65 md:flex">
+              <a href="#features" className="transition-colors hover:text-base-content">
+                Features
+              </a>
+              <a href="#extras" className="transition-colors hover:text-base-content">
+                What's different
+              </a>
+              <a href="#faq" className="transition-colors hover:text-base-content">
+                FAQ
+              </a>
+            </nav>
+          </div>
           <div className="ml-auto flex items-center gap-2">
             <Link to="/login" className="btn btn-ghost btn-sm h-9 rounded-xl">
               Sign in
@@ -114,14 +121,14 @@ export default function LandingPage() {
       </header>
 
       <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(oklch(var(--bc)/0.07)_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(70%_60%_at_50%_30%,black,transparent)]" />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 pb-20 pt-14 md:pt-20 lg:grid-cols-[1.05fr_1fr]">
+        <div className="bg-grid pointer-events-none absolute inset-0" />
+        <div className={`${WRAP} relative grid items-center gap-14 pb-20 pt-14 md:pt-20 lg:grid-cols-[1.1fr_1fr]`}>
           <div>
             <p className="anim-cascade inline-flex items-center gap-2 rounded-full border border-base-300 bg-base-100 px-3 py-1 text-xs font-medium text-base-content/70" style={{ "--i": 0 }}>
               <span className="size-1.5 rounded-full bg-success" /> Free · works in any browser · installable
             </p>
             <h1 className="anim-cascade mt-5 text-balance text-4xl font-bold leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.6rem]" style={{ "--i": 2 }}>
-              Messaging that respects everyone's time.
+              Messaging that respects <span className="text-primary">everyone's time.</span>
             </h1>
             <p className="anim-cascade mt-5 max-w-xl text-lg leading-relaxed text-base-content/65" style={{ "--i": 4 }}>
               Fast chats, groups, calls and voice notes — plus the details other apps skip: their local time, delivery at their morning, reminders, focus mode and an
@@ -131,7 +138,7 @@ export default function LandingPage() {
               <Link to="/signup" className="btn btn-primary h-12 min-h-0 rounded-xl px-6 text-[0.95rem]">
                 Create a free account <ArrowRight className="size-4" />
               </Link>
-              <Link to="/login" className="btn h-12 min-h-0 rounded-xl px-6 text-[0.95rem]">
+              <Link to="/login" className="btn h-12 min-h-0 rounded-xl border-base-300 bg-base-100 px-6 text-[0.95rem] hover:border-base-content/20 hover:bg-base-200">
                 I already have an account
               </Link>
             </div>
@@ -145,8 +152,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="features" className="border-t border-base-300/60 bg-base-200/50 py-20">
-        <div className="mx-auto max-w-6xl px-5">
+      <section id="features" className="border-t border-base-300/60 bg-base-200/60 py-20">
+        <div className={WRAP}>
           <div data-reveal className="max-w-2xl">
             <h2 className="text-3xl font-bold tracking-tight">The essentials, done properly</h2>
             <p className="mt-3 text-base-content/60">Everything you expect from a modern messenger, built to feel instant on phones and desktops alike.</p>
@@ -160,7 +167,7 @@ export default function LandingPage() {
       </section>
 
       <section id="extras" className="py-20">
-        <div className="mx-auto max-w-6xl px-5">
+        <div className={WRAP}>
           <div data-reveal className="max-w-2xl">
             <h2 className="text-3xl font-bold tracking-tight">Small things that change how chatting feels</h2>
             <p className="mt-3 text-base-content/60">Time zones, busy days and noisy groups are where messaging breaks down. These are built in.</p>
@@ -173,7 +180,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="faq" className="border-t border-base-300/60 bg-base-200/50 py-20">
+      <section id="faq" className="border-t border-base-300/60 bg-base-200/60 py-16">
         <div className="mx-auto max-w-3xl px-5">
           <h2 data-reveal className="text-3xl font-bold tracking-tight">Straight answers</h2>
           <div className="mt-8 divide-y divide-base-300/70 rounded-2xl border border-base-300/70 bg-base-100">
@@ -190,27 +197,34 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="py-20">
-        <div data-reveal className="mx-auto max-w-4xl rounded-3xl bg-rail px-6 py-14 text-center text-white">
-          <h2 className="text-balance text-3xl font-bold tracking-tight">Start a conversation in under a minute</h2>
-          <p className="mx-auto mt-3 max-w-md text-white/65">Create an account, find your friends by name or email, and say hello.</p>
-          <Link to="/signup" className="btn mt-8 h-12 min-h-0 rounded-xl border-none bg-white px-6 text-neutral hover:bg-white/90">
-            Get started — it's free
-          </Link>
-        </div>
-      </section>
-
-      <footer className="safe-bottom border-t border-base-300/60">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-5 py-8 text-sm text-base-content/50 sm:flex-row">
-          <Logo size={24} />
-          <div className="flex gap-5">
-            <Link to="/privacy" className="hover:text-base-content">
-              Privacy
+      <footer className="safe-bottom border-t border-base-300/60 bg-base-100">
+        <div className={`${WRAP} py-12`}>
+          <div data-reveal className="flex flex-col items-start justify-between gap-6 rounded-2xl border border-base-300 bg-base-200/60 p-6 sm:flex-row sm:items-center sm:p-8">
+            <div>
+              <h2 className="text-balance text-2xl font-bold tracking-tight">Start a conversation in under a minute</h2>
+              <p className="mt-1.5 text-base-content/60">Create an account, find your friends by name or email, and say hello.</p>
+            </div>
+            <Link to="/signup" className="btn btn-primary h-12 min-h-0 shrink-0 rounded-xl px-6">
+              Get started, it's free <ArrowRight className="size-4" />
             </Link>
-            <Link to="/terms" className="hover:text-base-content">
-              Terms
-            </Link>
-            <span>© {new Date().getFullYear()} BlinkChat</span>
+          </div>
+          <div className="mt-10 flex flex-col gap-4 text-sm text-base-content/55 sm:flex-row sm:items-center sm:justify-between">
+            <Logo size={26} />
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <a href="#features" className="hover:text-base-content">
+                Features
+              </a>
+              <a href="#faq" className="hover:text-base-content">
+                FAQ
+              </a>
+              <Link to="/privacy" className="hover:text-base-content">
+                Privacy
+              </Link>
+              <Link to="/terms" className="hover:text-base-content">
+                Terms
+              </Link>
+              <span className="text-base-content/40">© {new Date().getFullYear()} BlinkChat</span>
+            </div>
           </div>
         </div>
       </footer>

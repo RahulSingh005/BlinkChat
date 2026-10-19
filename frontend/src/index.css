@@ -31,8 +31,9 @@
   [data-theme="blink"] {
     --bubble-in: 255 255 255;
     --bubble-in-border: 226 228 232;
-    --chat-bg: 239 240 242;
+    --chat-bg: 238 241 245;
     --rail: 247 248 250;
+    --rail-bg: color-mix(in oklch, oklch(var(--p)) 7%, #f7f8fa);
     --ink: 17 19 23;
     --doodle: 17 19 23;
     --doodle-alpha: 0.055;
@@ -41,13 +42,14 @@
     color-scheme: light;
   }
   [data-theme="blinkdark"] {
-    --bubble-in: 36 36 40;
-    --bubble-in-border: 44 44 49;
-    --chat-bg: 15 15 17;
-    --rail: 14 14 16;
-    --ink: 14 14 16;
-    --doodle: 236 236 239;
-    --doodle-alpha: 0.03;
+    --bubble-in: 44 44 44;
+    --bubble-in-border: 56 56 56;
+    --chat-bg: 23 23 23;
+    --rail: 27 27 27;
+    --rail-bg: #1b1b1b;
+    --ink: 24 24 24;
+    --doodle: 237 237 237;
+    --doodle-alpha: 0.035;
     --bo: 50% 0.19 266;
     --boc: 100% 0 0;
     color-scheme: dark;
@@ -204,6 +206,31 @@
   background-image:
     radial-gradient(at 0% 0%, oklch(var(--p) / 0.09) 0, transparent 55%),
     radial-gradient(at 100% 100%, oklch(var(--p) / 0.05) 0, transparent 50%);
+}
+/* Light theme personality: soft accent glow + accent-tinted doodles. */
+[data-theme="blink"] .wallpaper-doodle,
+[data-theme="blink"] .wallpaper-plain {
+  background-image:
+    radial-gradient(110% 70% at 0% 0%, oklch(var(--p) / 0.09), transparent 60%),
+    radial-gradient(90% 60% at 100% 100%, oklch(var(--p) / 0.07), transparent 60%);
+}
+[data-theme="blink"] .wallpaper-doodle::before {
+  background-color: oklch(var(--p) / 0.11);
+}
+/* Fine grid lines that fade out (hero sections, placeholders). */
+.bg-grid {
+  background-image:
+    linear-gradient(oklch(var(--bc) / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(var(--bc) / 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(75% 70% at 50% 35%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(75% 70% at 50% 35%, #000 30%, transparent 100%);
+}
+/* Google's sign-in iframe paints a white box when its color scheme
+   differs from the page's; keep it "light" so it stays transparent. */
+.gsi-holder,
+.gsi-holder iframe {
+  color-scheme: light;
 }
 .wallpaper-dots {
   background-color: rgb(var(--chat-bg));

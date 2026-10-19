@@ -73,7 +73,7 @@ export default function GoogleButton({ text = "continue_with" }) {
   return (
     <div className="relative min-h-[44px] w-full">
       {!ready && <div className="skeleton-line absolute inset-0 rounded-full" />}
-      <div ref={holder} className="flex w-full justify-center" />
+      <div ref={holder} className="gsi-holder flex w-full justify-center" />
     </div>
   );
 }

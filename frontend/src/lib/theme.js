@@ -37,4 +37,4 @@ export function accentVars(key, dark, bubbleStyle = "solid") {
 }
 
 /** Browser chrome color (Android status bar, installed PWA title bar). */
-export const chromeColor = (dark) => (dark ? "#18181b" : "#ffffff");
+export const chromeColor = (dark) => (dark ? "#1f1f1f" : "#ffffff");

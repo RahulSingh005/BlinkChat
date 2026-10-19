@@ -10,7 +10,7 @@ export default function SectionShell({ title, subtitle, onBack, backLabel, actio
     <div className="flex min-h-0 w-full flex-1 flex-col bg-base-200">
       <PanelHeader title={title} subtitle={subtitle} onBack={onBack} backLabel={backLabel} actions={actions} size="md" border />
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className="anim-fade mx-auto w-full max-w-3xl space-y-6 px-4 pb-24 pt-5 md:px-8 md:pb-10">{children}</div>
+        <div className="anim-fade w-full max-w-[1100px] space-y-6 px-4 pb-24 pt-5 md:px-8 md:pb-10 xl:px-10">{children}</div>
       </div>
     </div>
   );

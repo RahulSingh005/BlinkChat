@@ -738,7 +738,7 @@ function SettingsMenu({ active }) {
     <div className="flex h-full min-h-0 w-full flex-col bg-base-100">
       <PanelHeader title="Settings" onBack={wide ? () => navigate("/chat", { viewTransition: true }) : undefined} backLabel="Back to chats" />
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-28 md:pb-4">
-        <div className={`mb-2 flex items-center rounded-xl pr-1 transition ${active === "profile" ? "bg-base-content/[0.08]" : "hover:bg-base-content/[0.04]"}`}>
+        <div className={`mb-2 flex items-center rounded-xl pr-1 transition ${active === "profile" ? "bg-primary/10 dark:bg-base-content/[0.08]" : "hover:bg-base-content/[0.04]"}`}>
           <button type="button" onClick={() => go("profile")} className="flex min-w-0 flex-1 items-center gap-3 px-2 py-3 text-left">
             <Avatar src={me.profilePic} name={me.fullName} seed={me._id} size={56} />
             <span className="min-w-0 flex-1">
@@ -755,7 +755,7 @@ function SettingsMenu({ active }) {
             key={s.id}
             type="button"
             onClick={() => go(s.id)}
-            className={`anim-cascade flex w-full items-center gap-4 rounded-xl px-2 py-3 text-left transition ${active === s.id ? "bg-base-content/[0.08]" : "hover:bg-base-content/[0.04]"}`}
+            className={`anim-cascade flex w-full items-center gap-4 rounded-xl px-2 py-3 text-left transition ${active === s.id ? "bg-primary/10 dark:bg-base-content/[0.08]" : "hover:bg-base-content/[0.04]"}`}
             style={{ "--i": i }}
           >
             <span className="flex size-10 shrink-0 items-center justify-center text-base-content/65">

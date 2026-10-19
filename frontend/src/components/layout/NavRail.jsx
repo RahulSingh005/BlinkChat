@@ -35,7 +35,7 @@ function RailLink({ to, label, icon: Icon, badge, dot, tone, end }) {
       aria-label={label}
       className={({ isActive }) =>
         `group relative flex size-11 items-center justify-center rounded-2xl transition-colors ${
-          isActive ? "bg-base-content/[0.09] text-base-content" : "text-base-content/55 hover:bg-base-content/[0.05] hover:text-base-content"
+          isActive ? "bg-primary/[0.12] text-primary dark:bg-base-content/[0.09] dark:text-base-content" : "text-base-content/55 hover:bg-base-content/[0.05] hover:text-base-content"
         }`
       }
     >
