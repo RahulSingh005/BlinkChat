@@ -18,9 +18,12 @@ import {
   aiRouter,
   callRouter,
   configRouter,
+  inviteRouter,
+  mediaRouter,
   pushRouter,
   reminderRouter,
   scheduledRouter,
+  storyRouter,
   uploadRouter,
 } from "./routes/misc.route.js";
 import userRoutes from "./routes/user.route.js";
@@ -115,6 +118,9 @@ export function createApp() {
   app.use("/api/scheduled", scheduledRouter);
   app.use("/api/calls", callRouter);
   app.use("/api/ai", aiRouter);
+  app.use("/api/media", mediaRouter);
+  app.use("/api/stories", storyRouter);
+  app.use("/api/invites", inviteRouter);
   app.use("/api", notFoundApi);
 
   // Locally stored uploads (used when Cloudinary isn't configured). Random

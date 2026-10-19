@@ -28,8 +28,10 @@ describe("direct chats", () => {
     assert.equal(c1._id, c3._id);
     assert.equal(c1.type, "direct");
     assert.equal(c1.peerId, b.user._id);
+    // Opening a chat with yourself gives you "Saved Messages".
     const self = await a.post("/api/conversations/direct").send({ userId: a.user._id });
-    assert.equal(self.status, 400);
+    assert.equal(self.status, 200);
+    assert.equal(self.body.conversation.type, "self");
   });
 
   it("hides an empty chat from the other person until the first message", async () => {

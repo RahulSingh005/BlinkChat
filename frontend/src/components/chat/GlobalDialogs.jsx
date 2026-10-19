@@ -5,6 +5,7 @@ import { Camera, ChevronLeft, ChevronRight, Download, Search, Users, X } from "l
 import Avatar from "../ui/Avatar";
 import Sheet from "../ui/Sheet";
 import Spinner from "../ui/Spinner";
+import { InviteSheet, MessageInfoSheet, PollVotesSheet, ShareProfileSheet } from "./ExtraDialogs";
 import PeoplePicker from "./PeoplePicker";
 import TimePickerSheet from "./TimePickerSheet";
 import { useIsWide } from "../../hooks/useMediaQuery";
@@ -59,6 +60,25 @@ function NewChatDialog() {
         <span>
           <span className="block font-medium">New group</span>
           <span className="block text-xs text-base-content/55">Chat with up to 256 people</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            const conv = await useChatStore.getState().openSelf();
+            close();
+            go(conv._id);
+          } catch (err) {
+            toast.error(errorMessage(err));
+          }
+        }}
+        className="mb-3 flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition hover:bg-base-200/70"
+      >
+        <Avatar self size={44} />
+        <span>
+          <span className="block font-medium">Message yourself</span>
+          <span className="block text-xs text-base-content/55">Saved Messages · notes, links and files</span>
         </span>
       </button>
       <PeoplePicker onPick={pick} />
@@ -184,19 +204,25 @@ function ForwardDialog() {
     }
   }, [message]);
 
-  const list = useMemo(
-    () =>
-      Object.values(conversations)
-        .filter((c) => !c.blocked && !(c.type === "direct" && peerOf(c, me._id)?.deleted))
-        .filter((c) => conversationTitle(c, me._id).toLowerCase().includes(q.trim().toLowerCase()))
-        .sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0)),
-    [conversations, q, me._id]
-  );
+  const list = useMemo(() => {
+    const items = Object.values(conversations)
+      .filter((c) => !c.blocked && !(c.type === "direct" && peerOf(c, me._id)?.deleted))
+      .filter((c) => conversationTitle(c, me._id).toLowerCase().includes(q.trim().toLowerCase()))
+      .sort((a, b) => (a.type === "self" ? -1 : b.type === "self" ? 1 : new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0)));
+    const hasSelf = items.some((c) => c.type === "self");
+    if (!hasSelf && "saved messages".includes(q.trim().toLowerCase())) items.unshift({ _id: "__self__", type: "self", members: [], me: {} });
+    return items;
+  }, [conversations, q, me._id]);
 
   const send = async () => {
     setBusy(true);
     try {
-      await useChatStore.getState().forward(message._id, picked);
+      let ids = picked;
+      if (ids.includes("__self__")) {
+        const self = await useChatStore.getState().openSelf();
+        ids = ids.map((id) => (id === "__self__" ? self._id : id));
+      }
+      await useChatStore.getState().forward(message._id, ids);
       toast.success(picked.length > 1 ? `Forwarded to ${picked.length} chats` : "Forwarded");
       close();
     } catch (err) {
@@ -235,7 +261,14 @@ function ForwardDialog() {
                 onClick={() => setPicked((p) => (on ? p.filter((x) => x !== c._id) : p.length >= 5 ? (toast("Up to 5 chats at once"), p) : [...p, c._id]))}
                 className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left transition hover:bg-base-content/[0.05]"
               >
-                <Avatar src={c.type === "group" ? c.avatar : peer?.profilePic} name={conversationTitle(c, me._id)} seed={c.type === "group" ? c._id : peer?._id} group={c.type === "group"} size={42} />
+                <Avatar
+                  src={c.type === "group" ? c.avatar : peer?.profilePic}
+                  name={conversationTitle(c, me._id)}
+                  seed={c.type === "group" ? c._id : peer?._id}
+                  group={c.type === "group"}
+                  self={c.type === "self"}
+                  size={42}
+                />
                 <span className="min-w-0 flex-1 truncate font-medium">{conversationTitle(c, me._id)}</span>
                 <span className={`flex size-6 items-center justify-center rounded-full border-2 transition ${on ? "border-primary bg-primary text-primary-content" : "border-base-300"}`}>
                   {on && <span className="size-2 rounded-full bg-primary-content" />}
@@ -341,10 +374,14 @@ function Lightbox() {
           <p className="truncate text-sm font-medium">{item.sender}</p>
           <p className="text-xs text-white/60">{formatDateTime(item.at)}</p>
         </div>
-        {!item.local && (
-          <a href={mediaUrl(item.url)} download target="_blank" rel="noopener noreferrer" className="flex size-10 items-center justify-center rounded-full hover:bg-white/10" aria-label="Download">
-            <Download className="size-5" />
-          </a>
+        {state.viewOnce ? (
+          <span className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold">View once</span>
+        ) : (
+          !item.local && (
+            <a href={mediaUrl(item.url)} download target="_blank" rel="noopener noreferrer" className="flex size-10 items-center justify-center rounded-full hover:bg-white/10" aria-label="Download">
+              <Download className="size-5" />
+            </a>
+          )
         )}
         <button type="button" onClick={close} className="flex size-10 items-center justify-center rounded-full hover:bg-white/10" aria-label="Close">
           <X className="size-6" />
@@ -352,9 +389,25 @@ function Lightbox() {
       </div>
       <div className="relative flex min-h-0 flex-1 items-center justify-center p-2" onClick={(e) => e.target === e.currentTarget && close()}>
         {item.kind === "video" ? (
-          <video key={src} src={src} controls autoPlay playsInline className="anim-scale-in max-h-full max-w-full rounded-lg" />
+          <video
+            key={src}
+            src={src}
+            controls
+            autoPlay
+            playsInline
+            controlsList={state.viewOnce ? "nodownload" : undefined}
+            onContextMenu={state.viewOnce ? (e) => e.preventDefault() : undefined}
+            className="anim-scale-in max-h-full max-w-full rounded-lg"
+          />
         ) : (
-          <img key={src} src={src} alt="" className="anim-scale-in max-h-full max-w-full select-none rounded-lg object-contain" draggable={false} />
+          <img
+            key={src}
+            src={src}
+            alt=""
+            onContextMenu={state.viewOnce ? (e) => e.preventDefault() : undefined}
+            className="anim-scale-in max-h-full max-w-full select-none rounded-lg object-contain"
+            draggable={false}
+          />
         )}
         {count > 1 && (
           <>
@@ -387,6 +440,10 @@ export default function GlobalDialogs() {
       <RemindDialog />
       <ScheduleDialog />
       <Lightbox />
+      <MessageInfoSheet />
+      <PollVotesSheet />
+      <InviteSheet />
+      <ShareProfileSheet />
     </>
   );
 }

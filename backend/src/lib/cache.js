@@ -38,6 +38,7 @@ const makeCache = () => {
 const conversationMeta = makeCache();
 const blockLists = makeCache();
 const contactLists = makeCache();
+const directContactLists = makeCache();
 
 /** { type, members: string[] } or null */
 export async function getConversationMeta(conversationId) {
@@ -81,12 +82,29 @@ export async function getContactIds(userId) {
   return value;
 }
 
+/** People `userId` has messaged 1:1 (the audience for their stories). */
+export async function getDirectContactIds(userId) {
+  const key = idStr(userId);
+  const cached = directContactLists.get(key);
+  if (cached) return cached;
+  const convs = await Conversation.find({ type: "direct", "members.user": key, lastMessageAt: { $ne: null } })
+    .select("members.user")
+    .lean();
+  const value = [...new Set(convs.flatMap((c) => c.members.map((m) => idStr(m.user))))].filter((id) => id !== key);
+  directContactLists.set(key, value);
+  return value;
+}
+
 export const invalidateContacts = (userIds) => {
-  for (const id of [].concat(userIds)) contactLists.delete(idStr(id));
+  for (const id of [].concat(userIds)) {
+    contactLists.delete(idStr(id));
+    directContactLists.delete(idStr(id));
+  }
 };
 
 export const clearCaches = () => {
   conversationMeta.clear();
   blockLists.clear();
   contactLists.clear();
+  directContactLists.clear();
 };

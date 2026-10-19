@@ -3,8 +3,10 @@ import {
   addMembers,
   clearChat,
   createGroup,
+  createInvite,
   createScheduled,
   deleteChat,
+  exportChat,
   getConversation,
   getMedia,
   getMessages,
@@ -12,11 +14,15 @@ import {
   listScheduled,
   markRead,
   openDirect,
+  openSelf,
+  pinMessage,
   removeMember,
+  revokeInvite,
   searchMessages,
   sendMessage,
   setDisappearing,
   setMemberRole,
+  unpinMessage,
   updateGroup,
   updateMySettings,
 } from "../controllers/conversation.controller.js";
@@ -32,6 +38,7 @@ import {
   mediaQuerySchema,
   memberRoleSchema,
   messagesQuerySchema,
+  pinMessageSchema,
   scheduleMessageSchema,
   searchMessagesSchema,
   sendMessageSchema,
@@ -45,6 +52,7 @@ router.use(protectRoute);
 router.get("/", listConversations);
 router.post("/direct", validate(directSchema), openDirect);
 router.post("/group", validate(createGroupSchema), createGroup);
+router.get("/self", openSelf);
 
 router.get("/:id", getConversation);
 router.patch("/:id", validate(updateGroupSchema), updateGroup);
@@ -58,6 +66,13 @@ router.post("/:id/read", markRead);
 router.patch("/:id/settings", validate(conversationSettingsSchema), updateMySettings);
 router.post("/:id/clear", clearChat);
 router.put("/:id/disappearing", validate(disappearingSchema), setDisappearing);
+router.get("/:id/export", exportChat);
+
+router.post("/:id/pins", validate(pinMessageSchema), pinMessage);
+router.delete("/:id/pins/:messageId", unpinMessage);
+
+router.post("/:id/invite", createInvite);
+router.delete("/:id/invite", revokeInvite);
 
 router.get("/:id/messages", validate(messagesQuerySchema, "query"), getMessages);
 router.get("/:id/messages/search", validate(searchMessagesSchema, "query"), searchMessages);

@@ -50,11 +50,18 @@ export async function lastVisibleMessage(conv, viewerId) {
     .lean();
 }
 
+/** Pinned message documents for a set of conversations (one query). */
+export async function loadPinnedMessages(convs) {
+  const ids = convs.flatMap((c) => (c.pinned || []).map((p) => p.message));
+  if (!ids.length) return [];
+  return Message.find({ _id: { $in: ids } }).lean();
+}
+
 /** Serializes one conversation for a viewer (loads members + last message). */
 export async function buildConversation(conv, viewer, { withLastMessage = true } = {}) {
-  const usersById = await loadUsersMap(conv.members.map((m) => m.user));
+  const [usersById, pinned] = await Promise.all([loadUsersMap(conv.members.map((m) => m.user)), loadPinnedMessages([conv])]);
   const last = withLastMessage ? await lastVisibleMessage(conv, viewer._id) : undefined;
-  return serializeConversation(conv, viewer, usersById, last);
+  return serializeConversation(conv, viewer, usersById, last, pinned);
 }
 
 /**
@@ -105,13 +112,31 @@ export async function listConversationsFor(viewer) {
     },
   ]);
 
-  const usersById = await loadUsersMap(convs.flatMap((c) => c.members.map((m) => m.user)));
-  return convs.map((c) => serializeConversation(c, viewer, usersById, c._last[0] || null));
+  const [usersById, pinned] = await Promise.all([
+    loadUsersMap(convs.flatMap((c) => c.members.map((m) => m.user))),
+    loadPinnedMessages(convs),
+  ]);
+  return convs.map((c) => serializeConversation(c, viewer, usersById, c._last[0] || null, pinned));
 }
 
 /** Gets (or atomically creates) the single direct chat between two users. */
+/** "Saved Messages": a private chat with yourself for notes, links and files. */
+export async function findOrCreateSelf(me) {
+  const directKey = `self:${idStr(me._id)}`;
+  let conv = await Conversation.findOne({ directKey });
+  if (!conv) {
+    try {
+      conv = await Conversation.create({ type: "self", directKey, createdBy: me._id, members: [{ user: me._id }] });
+    } catch (err) {
+      if (err?.code !== 11000) throw err;
+      conv = await Conversation.findOne({ directKey });
+    }
+  }
+  return conv;
+}
+
 export async function findOrCreateDirect(me, otherUserId) {
-  if (sameId(me._id, otherUserId)) throw badRequest("You can't start a chat with yourself");
+  if (sameId(me._id, otherUserId)) return findOrCreateSelf(me);
   const other = await User.findById(otherUserId).select("_id").lean();
   if (!other) throw notFound("User not found");
 
@@ -145,13 +170,13 @@ export async function broadcastConversation(conv, event = "conversation:updated"
   const fresh = await Conversation.findById(conv._id).lean();
   if (!fresh) return;
   const memberIds = fresh.members.map((m) => idStr(m.user));
-  const usersById = await loadUsersMap([...memberIds, ...extraUserIds]);
+  const [usersById, pinned] = await Promise.all([loadUsersMap([...memberIds, ...extraUserIds]), loadPinnedMessages([fresh])]);
   await Promise.all(
     memberIds.map(async (uid) => {
       const viewer = usersById.get(uid);
       if (!viewer) return;
       const last = await lastVisibleMessage(fresh, uid);
-      emitToUser(uid, event, { conversation: serializeConversation(fresh, viewer, usersById, last) });
+      emitToUser(uid, event, { conversation: serializeConversation(fresh, viewer, usersById, last, pinned) });
     })
   );
 }

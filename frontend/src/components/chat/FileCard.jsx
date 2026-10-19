@@ -27,20 +27,20 @@ function FileCard({ att, mine }) {
         if (!href) e.preventDefault();
       }}
       className={`flex w-[min(68vw,280px)] items-center gap-3 rounded-xl p-2.5 transition ${
-        mine ? "bg-primary-content/15 hover:bg-primary-content/20" : "bg-base-content/[0.05] hover:bg-base-content/[0.08]"
+        mine ? "bg-bubble-out-content/[0.12] hover:bg-bubble-out-content/[0.18]" : "bg-base-content/[0.05] hover:bg-base-content/[0.08]"
       }`}
     >
-      <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${mine ? "bg-primary-content/20" : "bg-primary/10 text-primary"}`}>
+      <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${mine ? "bg-bubble-out-content/20" : "bg-primary/10 text-primary"}`}>
         <Icon className="size-5" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{att.name || "File"}</span>
-        <span className={`block text-xs ${mine ? "text-primary-content/70" : "text-base-content/50"}`}>
+        <span className={`block text-xs ${mine ? "text-bubble-out-content/70" : "text-base-content/50"}`}>
           {[ext.toUpperCase(), formatBytes(att.size)].filter(Boolean).join(" · ")}
           {att.local && ` · ${Math.round((att.progress || 0) * 100)}%`}
         </span>
       </span>
-      {href && <Download className={`size-4 shrink-0 ${mine ? "text-primary-content/80" : "text-base-content/45"}`} />}
+      {href && <Download className={`size-4 shrink-0 ${mine ? "text-bubble-out-content/80" : "text-base-content/45"}`} />}
     </a>
   );
 }

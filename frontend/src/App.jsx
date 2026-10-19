@@ -12,8 +12,12 @@ const LoginPage = lazy(() => import("./pages/LoginPage"));
 const SignUpPage = lazy(() => import("./pages/SignUpPage"));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
-const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const RemindersPage = lazy(() => import("./pages/RemindersPage"));
+const UpdatesPage = lazy(() => import("./pages/UpdatesPage"));
+const CallsPage = lazy(() => import("./pages/CallsPage"));
+const StarredPage = lazy(() => import("./pages/StarredPage"));
+const JoinPage = lazy(() => import("./pages/JoinPage"));
+const UserLinkPage = lazy(() => import("./pages/UserLinkPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 
 const router = createBrowserRouter([
@@ -36,9 +40,15 @@ const router = createBrowserRouter([
         children: [
           { path: "chat", element: <ChatPage /> },
           { path: "chat/:conversationId", element: <ChatPage /> },
+          { path: "updates", element: <UpdatesPage /> },
+          { path: "calls", element: <CallsPage /> },
           { path: "reminders", element: <RemindersPage /> },
+          { path: "starred", element: <StarredPage /> },
           { path: "settings", element: <SettingsPage /> },
-          { path: "profile", element: <ProfilePage /> },
+          { path: "settings/:section", element: <SettingsPage /> },
+          { path: "profile", element: <Navigate to="/settings/profile" replace /> },
+          { path: "join/:code", element: <JoinPage /> },
+          { path: "u/:userId", element: <UserLinkPage /> },
         ],
       },
       { path: "*", element: <Navigate to="/" replace /> },

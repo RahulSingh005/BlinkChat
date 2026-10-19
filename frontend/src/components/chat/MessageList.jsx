@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { ArrowDown } from "lucide-react";
 import CatchUpCard from "./CatchUpCard";
@@ -13,6 +14,8 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { useCallStore } from "../../store/useCallStore";
 import { peerOf, receiptFor, useChatStore } from "../../store/useChatStore";
 import { useAiEnabled, useConfigStore } from "../../store/useConfigStore";
+import { setNavDirection } from "../../lib/transitions";
+import { useIsWide } from "../../hooks/useMediaQuery";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useUIStore } from "../../store/useUIStore";
 
@@ -63,6 +66,10 @@ export default function MessageList({ conv, wallpaper }) {
   const ai = useAiEnabled();
   const transcription = useConfigStore((s) => Boolean(s.config?.features?.ai?.transcription));
   const searchQuery = useUIStore((s) => (s.searchOpen ? s.searchQuery || "" : ""));
+  const showLinkPreview = useSettingsStore((s) => s.linkPreviews !== false);
+  const autoplayGifs = useSettingsStore((s) => s.autoplayGifs !== false);
+  const navigate = useNavigate();
+  const wide = useIsWide();
 
   const scrollRef = useRef(null);
   const nearBottom = useRef(true);
@@ -84,6 +91,7 @@ export default function MessageList({ conv, wallpaper }) {
 
   const membersById = useMemo(() => new Map(conv.members.map((m) => [m.user._id, m.user])), [conv.members]);
   const nameOf = useCallback((id) => (id === me._id ? "You" : membersById.get(id)?.fullName || "Deleted account"), [membersById, me._id]);
+  const mentionLabel = useCallback((id) => firstName(id === me._id ? me.fullName : membersById.get(id)?.fullName || ""), [membersById, me._id, me.fullName]);
 
   // Stop the entrance cascade shortly after the first paint.
   useEffect(() => {
@@ -208,9 +216,46 @@ export default function MessageList({ conv, wallpaper }) {
     return () => clearTimeout(t);
   }, [autoTranslate, ai, items, translations, me._id, me.settings?.language]);
 
+  const openChatWith = useCallback(
+    async (userId) => {
+      if (!userId || userId === me._id) return;
+      try {
+        const c = await useChatStore.getState().openDirect(userId);
+        if (!wide) setNavDirection("forward");
+        navigate(`/chat/${c._id}`, { viewTransition: true });
+      } catch (err) {
+        toast.error(errorMessage(err));
+      }
+    },
+    [me._id, navigate, wide]
+  );
+
   const actions = useMemo(
     () => ({
       nameOf,
+      mentionLabel,
+      onVote: (m, optionIds) => useChatStore.getState().vote(m, optionIds),
+      onEndPoll: async (m) => {
+        const ok = await useUIStore.getState().ask({ title: "End this poll?", body: "No one will be able to vote after it ends.", confirmLabel: "End poll" });
+        if (ok) useChatStore.getState().closePoll(m).catch((err) => toast.error(errorMessage(err)));
+      },
+      onShowVotes: (m) => useUIStore.getState().open("pollVotes", { messageId: m._id, conversationId: conv._id }),
+      onOpenViewOnce: async (m) => {
+        if (m.sender === me._id) {
+          if (m.viewOnceMedia?.length) {
+            useUIStore.getState().open("lightbox", { items: m.viewOnceMedia.map((a) => ({ ...a, sender: "You", at: m.createdAt })), index: 0, viewOnce: true });
+          } else toast("You can't open view once media you sent");
+          return;
+        }
+        try {
+          const media = await useChatStore.getState().openViewOnce(m);
+          useUIStore.getState().open("lightbox", { items: media.map((a) => ({ ...a, sender: nameOf(m.sender), at: m.createdAt })), index: 0, viewOnce: true });
+        } catch (err) {
+          toast.error(errorMessage(err, "Couldn't open this media"));
+        }
+      },
+      onMessageContact: (card) => openChatWith(card.user),
+      onOpenProfile: (userId) => openChatWith(userId),
       onReply: (m) => useChatStore.getState().setReplyTo(conv._id, m),
       onReact: (m, emoji) => useChatStore.getState().react(conv._id, m._id, emoji),
       onReactMenu: (m, anchorEl) => setMenu({ message: m, anchor: anchorEl, reactionsOnly: true }),
@@ -227,7 +272,7 @@ export default function MessageList({ conv, wallpaper }) {
         }
       },
     }),
-    [conv._id, nameOf]
+    [conv._id, nameOf, mentionLabel, me._id, openChatWith]
   );
 
   const peer = peerOf(conv, me._id);
@@ -241,8 +286,8 @@ export default function MessageList({ conv, wallpaper }) {
   const typingNames = typers.map((id) => firstName(membersById.get(id)?.fullName)).join(", ");
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={scrollRef} onScroll={onScroll} className={`wallpaper-${wallpaper} overflow-anchor-none relative min-h-0 flex-1 overflow-y-auto overscroll-contain`}>
+    <div className={`wallpaper-${wallpaper} relative flex min-h-0 flex-1 flex-col`}>
+      <div ref={scrollRef} onScroll={onScroll} className="overflow-anchor-none relative min-h-0 flex-1 overflow-y-auto overscroll-contain [container-type:inline-size]">
         {!thread?.loaded ? (
           thread?.error ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
@@ -255,7 +300,7 @@ export default function MessageList({ conv, wallpaper }) {
             <MessagesSkeleton />
           )
         ) : (
-          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-end pb-3 pt-2">
+          <div className="flex min-h-full w-full flex-col justify-end px-[clamp(10px,4.5cqw,80px)] pb-3 pt-2">
             {thread.loadingOlder && (
               <div className="flex justify-center py-3">
                 <Spinner className="size-5 text-base-content/40" />
@@ -290,6 +335,8 @@ export default function MessageList({ conv, wallpaper }) {
                   canTranscribe={transcription}
                   cascade={c}
                   actions={actions}
+                  showLinkPreview={showLinkPreview}
+                  autoplayGifs={autoplayGifs}
                 />
               );
             })}
@@ -301,7 +348,7 @@ export default function MessageList({ conv, wallpaper }) {
 
       {floatingDate && (
         <div className="anim-fade pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center">
-          <span className="rounded-full bg-base-100/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-base-content/60 shadow-soft backdrop-blur">{floatingDate}</span>
+          <span className="rounded-lg bg-base-100/95 px-2.5 py-1 text-xs font-medium text-base-content/60 shadow-soft">{floatingDate}</span>
         </div>
       )}
 
@@ -313,7 +360,7 @@ export default function MessageList({ conv, wallpaper }) {
             if (thread?.hasNewer) useChatStore.getState().jumpToLatest(conv._id);
             else scrollToBottom("smooth");
           }}
-          className="anim-scale-in absolute bottom-3 right-3 z-10 flex size-11 items-center justify-center rounded-full border border-base-300 bg-base-100 text-base-content/70 shadow-float transition hover:text-base-content md:right-5"
+          className="anim-scale-in absolute bottom-3 right-3 z-10 flex size-11 items-center justify-center rounded-full bg-base-100 text-base-content/70 shadow-float transition hover:text-base-content md:right-6"
           aria-label="Jump to latest message"
         >
           <ArrowDown className="size-5" />
@@ -332,9 +379,21 @@ export default function MessageList({ conv, wallpaper }) {
 
 /** Shown at the very top of a conversation's history. */
 function ChatIntro({ conv, peer }) {
+  if (conv.type === "self") {
+    return (
+      <div className="mx-auto my-6 max-w-sm px-4 text-center">
+        <div className="rounded-2xl bg-base-100/95 px-5 py-4 text-left text-[0.8125rem] leading-relaxed text-base-content/65 shadow-sm">
+          <p className="mb-1.5 text-center text-sm font-semibold text-base-content">Your Saved Messages</p>
+          <p>• Forward messages here to save them</p>
+          <p>• Keep notes, links, photos and files</p>
+          <p>• Everything syncs across your devices</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="mx-auto my-6 max-w-xs px-4 text-center">
-      <p className="rounded-2xl bg-base-100/90 px-4 py-3 text-xs leading-relaxed text-base-content/55 shadow-sm backdrop-blur">
+      <p className="rounded-2xl bg-base-100/95 px-4 py-3 text-xs leading-relaxed text-base-content/55 shadow-sm">
         {conv.type === "group"
           ? `This is the start of “${conv.name}”.`
           : peer?.deleted

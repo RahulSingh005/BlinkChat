@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import toast from "react-hot-toast";
-import { AlarmClock, Copy, Forward, Languages, Pencil, Plus, Reply, RotateCcw, Trash2 } from "lucide-react";
+import { AlarmClock, Copy, Forward, Info, Languages, Pencil, Pin, PinOff, Plus, Reply, RotateCcw, Star, StarOff, Trash2 } from "lucide-react";
 import Menu from "../ui/Menu";
 import { QUICK_REACTIONS } from "../../lib/reactions";
 import { errorMessage } from "../../lib/api";
@@ -52,6 +52,19 @@ export default function MessageMenu({ conv, state, onClose }) {
   const deleted = Boolean(m?.deletedAt);
   const pending = Boolean(m?.status);
   const myReaction = m?.reactions?.find((r) => r.user === me._id)?.emoji;
+  const pinned = Boolean(m && conv.pinned?.some((p) => p.message._id === m._id));
+  const canPin = conv.type !== "group" || conv.me.role === "admin";
+  const special = Boolean(m?.poll || m?.location || m?.contactCard || m?.viewOnce);
+
+  const togglePin = async () => {
+    try {
+      if (pinned) await chat.unpinMessage(conv._id, m._id);
+      else await chat.pinMessage(conv._id, m._id);
+      toast.success(pinned ? "Unpinned" : "Pinned");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
 
   const react = (emoji) => {
     chat.react(conv._id, m._id, emoji);
@@ -99,14 +112,22 @@ export default function MessageMenu({ conv, state, onClose }) {
               }
             },
           },
-          mine && m.text && !deleted && !m.forwarded && Date.now() - new Date(m.createdAt).getTime() < editWindow && {
+          mine && m.text && !deleted && !m.forwarded && !special && Date.now() - new Date(m.createdAt).getTime() < editWindow && {
             key: "edit",
             label: "Edit",
             icon: Pencil,
             onSelect: () => chat.setEditing(conv._id, m),
           },
-          !deleted && { key: "forward", label: "Forward", icon: Forward, onSelect: () => ui.open("forward", m) },
+          !deleted && canPin && !m.viewOnce && { key: "pin", label: pinned ? "Unpin" : "Pin", icon: pinned ? PinOff : Pin, onSelect: togglePin },
+          !deleted && {
+            key: "star",
+            label: m.starred ? "Unstar" : "Star",
+            icon: m.starred ? StarOff : Star,
+            onSelect: () => chat.star(m, !m.starred),
+          },
+          !deleted && !m.viewOnce && { key: "forward", label: "Forward", icon: Forward, onSelect: () => ui.open("forward", m) },
           !deleted && { key: "remind", label: "Remind me", icon: AlarmClock, onSelect: () => ui.open("remind", m) },
+          mine && !deleted && conv.type !== "self" && { key: "info", label: "Message info", icon: Info, onSelect: () => ui.open("messageInfo", { messageId: m._id, conversationId: conv._id }) },
           ai && m.text && !mine && !deleted && {
             key: "translate",
             label: translation?.text ? "Show original" : "Translate",

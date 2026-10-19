@@ -1,5 +1,13 @@
 import daisyui from "daisyui";
 
+const shared = {
+  "--rounded-box": "1rem",
+  "--rounded-btn": "0.75rem",
+  "--rounded-badge": "1.9rem",
+  "--animation-btn": "0.18s",
+  "--btn-focus-scale": "0.97",
+};
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
@@ -11,19 +19,23 @@ export default {
         sans: ['"Inter Variable"', "Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
       },
       colors: {
-        // Chat-specific surfaces, defined per theme in index.css.
+        // Chat surfaces, defined per theme (and accent) in index.css / settings.
         "bubble-in": "rgb(var(--bubble-in) / <alpha-value>)",
-        "bubble-in-border": "rgb(var(--bubble-in-border) / <alpha-value>)",
+        "bubble-out": "oklch(var(--bo) / <alpha-value>)",
+        "bubble-out-content": "oklch(var(--boc) / <alpha-value>)",
         "chat-bg": "rgb(var(--chat-bg) / <alpha-value>)",
         rail: "rgb(var(--rail) / <alpha-value>)",
+      },
+      spacing: {
+        header: "3.75rem", // 60px: every panel header shares this height
       },
       borderRadius: {
         "4xl": "2rem",
       },
       boxShadow: {
-        soft: "0 1px 2px rgb(15 23 42 / 0.04), 0 4px 16px rgb(15 23 42 / 0.06)",
-        float: "0 10px 40px -10px rgb(15 23 42 / 0.25)",
-        bubble: "0 1px 1.5px rgb(15 23 42 / 0.08)",
+        soft: "0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px rgb(0 0 0 / 0.06)",
+        float: "0 12px 40px -12px rgb(0 0 0 / 0.35)",
+        bubble: "0 1px 0.5px rgb(0 0 0 / 0.13)",
       },
       keyframes: {
         "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
@@ -51,6 +63,7 @@ export default {
   daisyui: {
     themes: [
       {
+        // Light: clean whites on a soft neutral canvas.
         blink: {
           primary: "#3B5BFD",
           "primary-content": "#FFFFFF",
@@ -58,46 +71,39 @@ export default {
           "secondary-content": "#FFFFFF",
           accent: "#7C3AED",
           "accent-content": "#FFFFFF",
-          neutral: "#1E293B",
-          "neutral-content": "#F8FAFC",
+          neutral: "#1F2125",
+          "neutral-content": "#F7F7F8",
           "base-100": "#FFFFFF",
-          "base-200": "#F4F6FB",
-          "base-300": "#E5E9F2",
-          "base-content": "#0F172A",
+          "base-200": "#F2F3F5",
+          "base-300": "#E3E5E8",
+          "base-content": "#111317",
           info: "#0EA5E9",
           success: "#16A34A",
           warning: "#D97706",
           error: "#DC2626",
-          "--rounded-box": "1rem",
-          "--rounded-btn": "0.75rem",
-          "--rounded-badge": "1.9rem",
-          "--animation-btn": "0.18s",
-          "--btn-focus-scale": "0.97",
+          ...shared,
         },
       },
       {
+        // Dark: neutral graphite (no blue cast), like modern messengers.
         blinkdark: {
-          primary: "#3B5BFD",
+          primary: "#6F86FF",
           "primary-content": "#FFFFFF",
           secondary: "#38BDF8",
           "secondary-content": "#04131D",
-          accent: "#8B5CF6",
-          "accent-content": "#FFFFFF",
-          neutral: "#CBD5E1",
-          "neutral-content": "#0A0E19",
-          "base-100": "#0F1422",
-          "base-200": "#0A0E19",
-          "base-300": "#1E2638",
-          "base-content": "#E6E9F2",
-          info: "#38BDF8",
+          accent: "#A78BFA",
+          "accent-content": "#140A2A",
+          neutral: "#E4E4E7",
+          "neutral-content": "#18181B",
+          "base-100": "#18181B",
+          "base-200": "#111113",
+          "base-300": "#2A2A2F",
+          "base-content": "#ECECEF",
+          info: "#60A5FA",
           success: "#34D399",
           warning: "#FBBF24",
           error: "#F87171",
-          "--rounded-box": "1rem",
-          "--rounded-btn": "0.75rem",
-          "--rounded-badge": "1.9rem",
-          "--animation-btn": "0.18s",
-          "--btn-focus-scale": "0.97",
+          ...shared,
         },
       },
     ],

@@ -1,6 +1,17 @@
 import express from "express";
 import { getStatus, rewrite, smartReplies, summarize, transcribe, translate } from "../controllers/ai.controller.js";
 import { getConfig } from "../controllers/config.controller.js";
+import { joinByInvite, previewInvite } from "../controllers/invite.controller.js";
+import { callHistory, searchGifs } from "../controllers/media.controller.js";
+import {
+  createStory,
+  deleteStory,
+  listStories,
+  reactToStory,
+  replyToStory,
+  storyViewers,
+  viewStory,
+} from "../controllers/story.controller.js";
 import { getPublicKey, sendTest, subscribe, unsubscribe } from "../controllers/push.controller.js";
 import {
   cancelScheduled,
@@ -12,7 +23,7 @@ import {
 import { uploadFile, uploadMiddleware } from "../controllers/upload.controller.js";
 import { getIceServers } from "../lib/ice.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
-import { aiLimiter, uploadLimiter } from "../middleware/rateLimit.js";
+import { aiLimiter, gifLimiter, inviteLimiter, messageLimiter, storyLimiter, uploadLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import {
   aiRewriteSchema,
@@ -20,8 +31,13 @@ import {
   aiSummarizeSchema,
   aiTranscribeSchema,
   aiTranslateSchema,
+  createStorySchema,
+  gifQuerySchema,
+  pageQuerySchema,
   pushSubscribeSchema,
   pushUnsubscribeSchema,
+  storyReactSchema,
+  storyReplySchema,
 } from "../validation/schemas.js";
 
 export const configRouter = express.Router().get("/", getConfig);
@@ -48,10 +64,36 @@ export const scheduledRouter = express
   .patch("/:id", rescheduleScheduled)
   .delete("/:id", cancelScheduled);
 
-export const callRouter = express.Router().get("/ice-servers", protectRoute, async (req, res) => {
-  res.set("Cache-Control", "private, max-age=600");
-  res.json({ iceServers: await getIceServers() });
-});
+export const callRouter = express
+  .Router()
+  .get("/ice-servers", protectRoute, async (req, res) => {
+    res.set("Cache-Control", "private, max-age=600");
+    res.json({ iceServers: await getIceServers() });
+  })
+  .get("/history", protectRoute, validate(pageQuerySchema, "query"), callHistory);
+
+export const mediaRouter = express
+  .Router()
+  .use(protectRoute, gifLimiter)
+  .get("/gifs", validate(gifQuerySchema, "query"), searchGifs("gif"))
+  .get("/stickers", validate(gifQuerySchema, "query"), searchGifs("sticker"));
+
+export const storyRouter = express
+  .Router()
+  .use(protectRoute)
+  .get("/", listStories)
+  .post("/", storyLimiter, validate(createStorySchema), createStory)
+  .delete("/:id", deleteStory)
+  .post("/:id/view", viewStory)
+  .post("/:id/react", validate(storyReactSchema), reactToStory)
+  .post("/:id/reply", messageLimiter, validate(storyReplySchema), replyToStory)
+  .get("/:id/viewers", storyViewers);
+
+export const inviteRouter = express
+  .Router()
+  .use(protectRoute, inviteLimiter)
+  .get("/:code", previewInvite)
+  .post("/:code/join", joinByInvite);
 
 export const aiRouter = express
   .Router()

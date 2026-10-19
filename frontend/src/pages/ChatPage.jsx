@@ -1,11 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import ChatView from "../components/chat/ChatView";
 import ConversationList from "../components/chat/ConversationList";
 import EmptyChat from "../components/chat/EmptyChat";
 import InfoPanel from "../components/chat/InfoPanel";
-import { useIsDesktop, useIsWide } from "../hooks/useMediaQuery";
+import SplitView from "../components/layout/SplitView";
+import { useIsDesktop } from "../hooks/useMediaQuery";
 import { useChatStore } from "../store/useChatStore";
 import { useUIStore } from "../store/useUIStore";
 
@@ -18,15 +19,20 @@ export default function ChatPage() {
   const { conversationId } = useParams();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const wide = useIsWide();
   const desktop = useIsDesktop();
   const loaded = useChatStore((s) => s.loaded);
   const exists = useChatStore((s) => Boolean(conversationId && s.conversations[conversationId]));
   const infoOpen = useUIStore((s) => s.infoOpen);
+  const opened = useRef(new Set());
 
   useEffect(() => {
     if (!conversationId || !loaded) return undefined;
     if (!exists) {
+      // We were in this chat and it went away (deleted / left): just leave.
+      if (opened.current.has(conversationId)) {
+        navigate("/chat", { replace: true });
+        return undefined;
+      }
       let cancelled = false;
       useChatStore
         .getState()
@@ -41,6 +47,7 @@ export default function ChatPage() {
         cancelled = true;
       };
     }
+    opened.current.add(conversationId);
     useChatStore.getState().openConversation(conversationId);
     return () => useChatStore.getState().closeConversation();
   }, [conversationId, loaded, exists, navigate]);
@@ -50,7 +57,7 @@ export default function ChatPage() {
     useUIStore.setState({ searchOpen: false });
   }, [conversationId]);
 
-  // Deep links like /chat/:id?message=:messageId (reminders, notifications).
+  // Deep links like /chat/:id?message=:messageId (reminders, notifications, search).
   useEffect(() => {
     const messageId = params.get("message");
     if (!messageId || !conversationId || !exists) return;
@@ -59,23 +66,18 @@ export default function ChatPage() {
     setParams(params, { replace: true });
   }, [params, setParams, conversationId, exists]);
 
-  if (!wide) {
-    return conversationId ? <ChatView key={conversationId} conversationId={conversationId} /> : <ConversationList />;
-  }
-
   return (
-    <div className="flex min-w-0 flex-1">
-      <aside className="flex w-[340px] shrink-0 border-r border-base-300/70 lg:w-[380px]">
-        <ConversationList />
-      </aside>
-      <section className="relative flex min-w-0 flex-1" style={{ viewTransitionName: "chat-pane" }}>
-        {conversationId ? <ChatView key={conversationId} conversationId={conversationId} /> : <EmptyChat />}
-      </section>
-      {desktop && infoOpen && conversationId && exists && (
-        <aside className="anim-drawer flex w-[360px] shrink-0 border-l border-base-300/70">
-          <InfoPanel conversationId={conversationId} docked />
-        </aside>
-      )}
-    </div>
+    <SplitView
+      showDetail={Boolean(conversationId)}
+      list={<ConversationList />}
+      detail={conversationId ? <ChatView key={conversationId} conversationId={conversationId} /> : <EmptyChat />}
+      aside={
+        desktop && infoOpen && conversationId && exists ? (
+          <aside className="anim-drawer flex w-[min(380px,28vw)] shrink-0 border-l border-base-300/70 bg-base-100">
+            <InfoPanel conversationId={conversationId} docked />
+          </aside>
+        ) : null
+      }
+    />
   );
 }

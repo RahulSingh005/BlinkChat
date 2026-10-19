@@ -26,18 +26,30 @@
   html[data-font="lg"] { font-size: 16.5px; }
   html[data-font="xl"] { font-size: 18px; }
 
+  /* Chat surfaces. Outgoing bubbles (--bo/--boc) follow the accent color
+     and are set from JS (useSettingsStore) for each theme. */
   [data-theme="blink"] {
     --bubble-in: 255 255 255;
-    --bubble-in-border: 226 231 241;
-    --chat-bg: 236 240 248;
-    --rail: 13 19 36;
+    --bubble-in-border: 226 228 232;
+    --chat-bg: 239 240 242;
+    --rail: 247 248 250;
+    --ink: 17 19 23;
+    --doodle: 17 19 23;
+    --doodle-alpha: 0.055;
+    --bo: 55.5% 0.236 267;
+    --boc: 100% 0 0;
     color-scheme: light;
   }
   [data-theme="blinkdark"] {
-    --bubble-in: 27 34 52;
-    --bubble-in-border: 38 47 70;
-    --chat-bg: 9 13 23;
-    --rail: 6 9 18;
+    --bubble-in: 36 36 40;
+    --bubble-in-border: 44 44 49;
+    --chat-bg: 15 15 17;
+    --rail: 14 14 16;
+    --ink: 14 14 16;
+    --doodle: 236 236 239;
+    --doodle-alpha: 0.03;
+    --bo: 50% 0.19 266;
+    --boc: 100% 0 0;
     color-scheme: dark;
   }
 
@@ -113,10 +125,10 @@
   }
 
   .chip {
-    @apply inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-base-200 px-3 text-[0.8125rem] font-medium text-base-content/70 transition hover:bg-base-300;
+    @apply inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-base-200 px-3.5 text-[0.8125rem] font-medium text-base-content/70 transition-colors hover:bg-base-300 hover:text-base-content;
   }
   .chip-active {
-    @apply bg-primary text-primary-content hover:bg-primary;
+    @apply bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary;
   }
 
   .menu-item {
@@ -173,18 +185,30 @@
   background-color: rgb(var(--chat-bg));
 }
 .wallpaper-doodle {
+  position: relative;
+  isolation: isolate;
   background-color: rgb(var(--chat-bg));
-  background-size: 240px 240px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='%233B5BFD' stroke-opacity='.09' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 28a7 7 0 0 1 7-7h16a7 7 0 0 1 7 7v9a7 7 0 0 1-7 7H35l-7 6v-6.3A7 7 0 0 1 22 37z'/%3E%3Cpath d='M178 52c-5-4.2-9.5-7.6-9.5-12a5.2 5.2 0 0 1 9.5-3 5.2 5.2 0 0 1 9.5 3c0 4.4-4.5 7.8-9.5 12z'/%3E%3Cpath d='M112 98l3 6.2 6.8 1-4.9 4.7 1.2 6.7-6.1-3.2-6.1 3.2 1.2-6.7-4.9-4.7 6.8-1z'/%3E%3Cpath d='M56 150l-9 12h7l-2.5 10 9-12h-7z'/%3E%3Cpath d='M190 160v14M183 167h14'/%3E%3Ccircle cx='128' cy='204' r='5'/%3E%3Ccircle cx='30' cy='212' r='2'/%3E%3Ccircle cx='212' cy='112' r='2.5'/%3E%3Cpath d='M150 140a9 9 0 1 0 9 9M159 140v9h-9' /%3E%3Cpath d='M74 72h12M80 66v12'/%3E%3C/svg%3E");
 }
-[data-theme="blinkdark"] .wallpaper-doodle {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='%23E6E9F2' stroke-opacity='.045' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 28a7 7 0 0 1 7-7h16a7 7 0 0 1 7 7v9a7 7 0 0 1-7 7H35l-7 6v-6.3A7 7 0 0 1 22 37z'/%3E%3Cpath d='M178 52c-5-4.2-9.5-7.6-9.5-12a5.2 5.2 0 0 1 9.5-3 5.2 5.2 0 0 1 9.5 3c0 4.4-4.5 7.8-9.5 12z'/%3E%3Cpath d='M112 98l3 6.2 6.8 1-4.9 4.7 1.2 6.7-6.1-3.2-6.1 3.2 1.2-6.7-4.9-4.7 6.8-1z'/%3E%3Cpath d='M56 150l-9 12h7l-2.5 10 9-12h-7z'/%3E%3Cpath d='M190 160v14M183 167h14'/%3E%3Ccircle cx='128' cy='204' r='5'/%3E%3Ccircle cx='30' cy='212' r='2'/%3E%3Ccircle cx='212' cy='112' r='2.5'/%3E%3Cpath d='M150 140a9 9 0 1 0 9 9M159 140v9h-9' /%3E%3Cpath d='M74 72h12M80 66v12'/%3E%3C/svg%3E");
+.wallpaper-doodle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: rgb(var(--doodle) / var(--doodle-alpha));
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 28a7 7 0 0 1 7-7h16a7 7 0 0 1 7 7v9a7 7 0 0 1-7 7H35l-7 6v-6.3A7 7 0 0 1 22 37z'/%3E%3Cpath d='M178 52c-5-4.2-9.5-7.6-9.5-12a5.2 5.2 0 0 1 9.5-3 5.2 5.2 0 0 1 9.5 3c0 4.4-4.5 7.8-9.5 12z'/%3E%3Cpath d='M112 98l3 6.2 6.8 1-4.9 4.7 1.2 6.7-6.1-3.2-6.1 3.2 1.2-6.7-4.9-4.7 6.8-1z'/%3E%3Cpath d='M56 150l-9 12h7l-2.5 10 9-12h-7z'/%3E%3Cpath d='M190 160v14M183 167h14'/%3E%3Ccircle cx='128' cy='204' r='5'/%3E%3Ccircle cx='30' cy='212' r='2'/%3E%3Ccircle cx='212' cy='112' r='2.5'/%3E%3Cpath d='M150 140a9 9 0 1 0 9 9M159 140v9h-9' /%3E%3Cpath d='M74 72h12M80 66v12'/%3E%3C/svg%3E") 0 0 / 240px 240px repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 28a7 7 0 0 1 7-7h16a7 7 0 0 1 7 7v9a7 7 0 0 1-7 7H35l-7 6v-6.3A7 7 0 0 1 22 37z'/%3E%3Cpath d='M178 52c-5-4.2-9.5-7.6-9.5-12a5.2 5.2 0 0 1 9.5-3 5.2 5.2 0 0 1 9.5 3c0 4.4-4.5 7.8-9.5 12z'/%3E%3Cpath d='M112 98l3 6.2 6.8 1-4.9 4.7 1.2 6.7-6.1-3.2-6.1 3.2 1.2-6.7-4.9-4.7 6.8-1z'/%3E%3Cpath d='M56 150l-9 12h7l-2.5 10 9-12h-7z'/%3E%3Cpath d='M190 160v14M183 167h14'/%3E%3Ccircle cx='128' cy='204' r='5'/%3E%3Ccircle cx='30' cy='212' r='2'/%3E%3Ccircle cx='212' cy='112' r='2.5'/%3E%3Cpath d='M150 140a9 9 0 1 0 9 9M159 140v9h-9' /%3E%3Cpath d='M74 72h12M80 66v12'/%3E%3C/svg%3E") 0 0 / 240px 240px repeat;
 }
 .wallpaper-gradient {
   background-color: rgb(var(--chat-bg));
   background-image:
-    radial-gradient(at 0% 0%, oklch(var(--p) / 0.1) 0, transparent 55%),
-    radial-gradient(at 100% 100%, oklch(var(--s) / 0.1) 0, transparent 50%);
+    radial-gradient(at 0% 0%, oklch(var(--p) / 0.09) 0, transparent 55%),
+    radial-gradient(at 100% 100%, oklch(var(--p) / 0.05) 0, transparent 50%);
+}
+.wallpaper-dots {
+  background-color: rgb(var(--chat-bg));
+  background-image: radial-gradient(rgb(var(--doodle) / calc(var(--doodle-alpha) * 1.6)) 1px, transparent 1.4px);
+  background-size: 18px 18px;
 }
 
 /* ---- Message content ---------------------------------------------------- */
@@ -206,7 +230,7 @@
   background: oklch(var(--bc) / 0.08);
 }
 .msg-out .msg-text code {
-  background: rgb(255 255 255 / 0.18);
+  background: oklch(var(--boc) / 0.18);
 }
 .msg-text pre {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -218,7 +242,22 @@
   background: oklch(var(--bc) / 0.07);
 }
 .msg-out .msg-text pre {
-  background: rgb(255 255 255 / 0.14);
+  background: oklch(var(--boc) / 0.14);
+}
+.msg-text .mention {
+  font-weight: 600;
+  color: oklch(var(--p));
+}
+.msg-out .msg-text .mention {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.msg-text .mention-me {
+  border-radius: 0.3rem;
+  padding: 0 0.15em;
+  background: oklch(var(--p) / 0.14);
 }
 .msg-big-emoji {
   font-size: 2.6rem;
@@ -230,14 +269,13 @@
 }
 
 .avatar-tint {
-  background-color: oklch(0.93 0.045 var(--h));
-  color: oklch(0.43 0.12 var(--h));
+  background-color: oklch(0.92 0.05 var(--h));
+  color: oklch(0.42 0.12 var(--h));
 }
 [data-theme="blinkdark"] .avatar-tint {
-  background-color: oklch(0.33 0.06 var(--h));
-  color: oklch(0.88 0.07 var(--h));
+  background-color: oklch(0.36 0.07 var(--h));
+  color: oklch(0.9 0.06 var(--h));
 }
-
 /* ---- Motion ----------------------------------------------------------------
    Purposeful only: things enter where they come from, state changes are
    visible, nothing loops for decoration. All of it is disabled by
@@ -298,6 +336,19 @@
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: none; }
 }
+@keyframes bc-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(3px); }
+}
+@keyframes bc-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes bc-float-up {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  15% { opacity: 1; transform: translateY(-20px) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-160px) scale(1); }
+}
 
 .anim-pop { animation: bc-pop 0.42s var(--spring) both; }
 .anim-in-left { animation: bc-in-left 0.32s var(--ease-out) both; }
@@ -310,6 +361,9 @@
 .anim-reaction { animation: bc-reaction 0.4s var(--spring) both; }
 .anim-slide-down { animation: bc-slide-down 0.24s var(--ease-out) both; }
 .anim-flash { animation: bc-flash 1.6s ease-in-out; }
+.anim-shake { animation: bc-shake 0.42s var(--ease-out) both; }
+.anim-float-up { animation: bc-float-up 1.4s var(--ease-out) forwards; }
+.tick-read { color: oklch(var(--tick)); }
 
 .ping-once::after {
   content: "";

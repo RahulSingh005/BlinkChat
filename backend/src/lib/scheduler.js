@@ -7,6 +7,7 @@ import { serializeMessage } from "./serializers.js";
 import { idStr, truncate } from "./utils.js";
 import { assertCanSend, createMessage } from "../services/message.service.js";
 import { serializeReminder } from "../controllers/reminder.controller.js";
+import { sweepExpiredStories } from "../controllers/story.controller.js";
 
 /**
  * Delivers scheduled messages and fires reminders. Jobs are claimed with an
@@ -21,8 +22,11 @@ const LOCK_TIMEOUT_MS = 60 * 1000;
 const MAX_ATTEMPTS = 3;
 const BATCH = 25;
 
+const STORY_SWEEP_MS = 5 * 60 * 1000;
+
 let timer = null;
 let running = false;
+let lastStorySweep = 0;
 
 const claim = (Model, timeField, extra = {}) =>
   Model.findOneAndUpdate(
@@ -111,6 +115,10 @@ export async function runSchedulerOnce() {
       const reminder = await claim(Reminder, "remindAt");
       if (!reminder) break;
       await fireReminder(reminder).catch((err) => console.warn("[scheduler] reminder failed:", err.message));
+    }
+    if (Date.now() - lastStorySweep > STORY_SWEEP_MS) {
+      lastStorySweep = Date.now();
+      await sweepExpiredStories();
     }
   } catch (err) {
     console.warn("[scheduler] tick failed:", err.message);

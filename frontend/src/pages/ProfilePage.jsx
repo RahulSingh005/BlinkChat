@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { Camera, Check, Clock3, Mail, Pencil, Phone, RefreshCw, Target, Trash2, X } from "lucide-react";
-import PageShell, { Card } from "../components/layout/PageShell";
+import { Camera, Check, Clock3, Mail, Pencil, Phone, QrCode, RefreshCw, Target, Trash2, X } from "lucide-react";
+import { Card } from "../components/layout/PageShell";
 import Avatar from "../components/ui/Avatar";
 import Spinner from "../components/ui/Spinner";
 import Toggle from "../components/ui/Toggle";
@@ -12,6 +12,7 @@ import { storage } from "../lib/storage";
 import { myTimezone, nextWallTime, timeIn, zoneCity } from "../lib/time";
 import { uploadFile } from "../lib/upload";
 import { useAuthStore } from "../store/useAuthStore";
+import { useUIStore } from "../store/useUIStore";
 
 const ABOUT_PRESETS = ["Available", "Busy", "At work", "At the gym", "Battery about to die", "Can't talk, message only", "In a meeting", "Sleeping", "Urgent calls only"];
 const STATUS_PRESETS = [
@@ -117,7 +118,8 @@ function EditableRow({ icon: Icon, label, value, placeholder, maxLength, onSave,
   );
 }
 
-export default function ProfilePage() {
+/** Profile settings (photo, name, about, status, focus mode, time zone). */
+export default function ProfileSection() {
   const me = useAuthStore((s) => s.authUser);
   const update = useAuthStore((s) => s.updateProfile);
   const [uploading, setUploading] = useState(false);
@@ -157,7 +159,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <PageShell title="Profile" subtitle="How others see you on BlinkChat">
+    <>
       <section className="flex flex-col items-center pt-2 text-center">
         <div className="relative">
           <Avatar src={me.profilePic} name={me.fullName} seed={me._id} size={120} />
@@ -183,11 +185,17 @@ export default function ProfilePage() {
           />
         </div>
         <h2 className="mt-3 text-xl font-semibold tracking-tight">{me.fullName}</h2>
-        {me.profilePic && (
-          <button type="button" onClick={() => save({ profilePic: "" }, "Photo removed")} className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/50 hover:text-error">
-            <Trash2 className="size-3.5" /> Remove photo
+        <p className="text-sm text-base-content/55">{me.email}</p>
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          <button type="button" onClick={() => useUIStore.getState().open("shareProfile")} className="btn btn-sm h-9 rounded-full border-base-300 bg-base-100 px-4">
+            <QrCode className="size-4" /> My QR code
           </button>
-        )}
+          {me.profilePic && (
+            <button type="button" onClick={() => save({ profilePic: "" }, "Photo removed")} className="btn btn-ghost btn-sm h-9 rounded-full px-4 text-base-content/60 hover:text-error">
+              <Trash2 className="size-4" /> Remove photo
+            </button>
+          )}
+        </div>
       </section>
 
       <Card title="About you">
@@ -306,6 +314,6 @@ export default function ProfilePage() {
       </Card>
 
       <p className="text-center text-xs text-base-content/40">Member since {formatLongDate(me.createdAt)}</p>
-    </PageShell>
+    </>
   );
 }

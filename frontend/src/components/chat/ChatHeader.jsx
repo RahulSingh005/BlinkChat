@@ -1,7 +1,26 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ArrowLeft, Ban, EllipsisVertical, Eraser, Info, Languages, LogOut, Phone, Search, ShieldCheck, Target, Timer, Trash2, Video } from "lucide-react";
+import {
+  ArrowLeft,
+  Ban,
+  Download,
+  EllipsisVertical,
+  Eraser,
+  Heart,
+  HeartOff,
+  Info,
+  Languages,
+  LogOut,
+  Phone,
+  Search,
+  ShieldCheck,
+  Target,
+  Timer,
+  Trash2,
+  Video,
+  X,
+} from "lucide-react";
 import Avatar from "../ui/Avatar";
 import Menu from "../ui/Menu";
 import { confirmBlock, confirmClear, confirmDelete, muteItems } from "./conversationActions";
@@ -25,6 +44,8 @@ function useSubtitle(conv, peer, me) {
   const typing = useChatStore((s) => s.typing[conv._id]);
   const presence = useAuthStore((s) => (peer ? s.presence[peer._id] : null));
   useNow(30000);
+
+  if (conv.type === "self") return { text: "Notes, links and files for yourself" };
 
   const typers = Object.entries(typing || {}).filter(([id]) => id !== me._id);
   if (typers.length) {
@@ -65,9 +86,11 @@ export default function ChatHeader({ conv }) {
   const [menu, setMenu] = useState(null);
   const [timerMenu, setTimerMenu] = useState(null);
   const ui = useUIStore.getState();
+  const self = conv.type === "self";
+  const group = conv.type === "group";
 
   const goBack = () => {
-    setNavDirection("back");
+    if (!wide) setNavDirection("back");
     navigate("/chat", { viewTransition: true });
   };
 
@@ -78,12 +101,28 @@ export default function ChatHeader({ conv }) {
     useCallStore.getState().startCall(conv, peer, type);
   };
 
+  const exportChat = async () => {
+    const id = toast.loading("Preparing export…");
+    try {
+      await useChatStore.getState().exportChat(conv);
+      toast.success("Chat exported", { id });
+    } catch (err) {
+      toast.error(errorMessage(err, "Couldn't export this chat"), { id });
+    }
+  };
+
   const canEditTimer = conv.type === "direct" || conv.me.role === "admin";
   const items = [
-    { key: "info", label: conv.type === "group" ? "Group info" : "Contact info", icon: Info, onSelect: () => ui.open("infoOpen") },
+    { key: "info", label: group ? "Group info" : self ? "Chat info" : "Contact info", icon: Info, onSelect: () => ui.open("infoOpen") },
     !wide && { key: "search", label: "Search", icon: Search, onSelect: () => ui.open("searchOpen") },
+    {
+      key: "fav",
+      label: conv.me.favorite ? "Remove from favorites" : "Add to favorites",
+      icon: conv.me.favorite ? HeartOff : Heart,
+      onSelect: () => useChatStore.getState().toggleFavorite(conv).catch((err) => toast.error(errorMessage(err))),
+    },
     "divider",
-    ...muteItems(conv),
+    ...(self ? [] : muteItems(conv)),
     canEditTimer && {
       key: "timer",
       label: "Disappearing messages",
@@ -91,16 +130,18 @@ export default function ChatHeader({ conv }) {
       icon: Timer,
       onSelect: () => setTimerMenu({ anchor: menu?.anchor }),
     },
-    ai && {
-      key: "translate",
-      label: "Translate automatically",
-      icon: Languages,
-      checked: autoTranslate,
-      onSelect: () => {
-        useSettingsStore.getState().setAutoTranslate(conv._id, !autoTranslate);
-        toast(autoTranslate ? "Auto-translate off" : "Messages in other languages will be translated");
+    ai &&
+      !self && {
+        key: "translate",
+        label: "Translate automatically",
+        icon: Languages,
+        checked: autoTranslate,
+        onSelect: () => {
+          useSettingsStore.getState().setAutoTranslate(conv._id, !autoTranslate);
+          toast(autoTranslate ? "Auto-translate off" : "Messages in other languages will be translated");
+        },
       },
-    },
+    { key: "export", label: "Export chat", icon: Download, onSelect: exportChat },
     "divider",
     { key: "clear", label: "Clear chat", icon: Eraser, onSelect: () => confirmClear(conv) },
     conv.type === "direct" &&
@@ -114,11 +155,13 @@ export default function ChatHeader({ conv }) {
       },
     {
       key: "delete",
-      label: conv.type === "group" ? "Exit group" : "Delete chat",
-      icon: conv.type === "group" ? LogOut : Trash2,
+      label: group ? "Exit group" : "Delete chat",
+      icon: group ? LogOut : Trash2,
       danger: true,
       onSelect: () => confirmDelete(conv, () => navigate("/chat", { replace: true })),
     },
+    wide && "divider",
+    wide && { key: "close", label: "Close chat", icon: X, onSelect: goBack },
   ];
 
   const setTimer = async (seconds) => {
@@ -130,13 +173,11 @@ export default function ChatHeader({ conv }) {
   };
 
   return (
-    <header className="safe-top z-20 shrink-0 border-b border-base-300/70 bg-base-100/95 backdrop-blur-md">
-      <div className="flex h-16 items-center gap-1 px-1.5 md:px-3">
-        {!wide && (
-          <button type="button" className="icon-btn" onClick={goBack} aria-label="Back to chats">
-            <ArrowLeft className="size-[22px]" />
-          </button>
-        )}
+    <header className="safe-top z-20 shrink-0 border-b border-base-300/70 bg-base-100">
+      <div className="flex h-header items-center gap-1 px-2 md:px-3">
+        <button type="button" className="icon-btn" onClick={goBack} aria-label={wide ? "Close chat" : "Back to chats"} title={wide ? "Close chat (Esc)" : "Back"}>
+          <ArrowLeft className="size-[22px]" />
+        </button>
         <button
           type="button"
           onClick={() => (useUIStore.getState().infoOpen ? ui.close("infoOpen") : ui.open("infoOpen"))}
@@ -144,16 +185,17 @@ export default function ChatHeader({ conv }) {
           aria-label={`${title} — show details`}
         >
           <Avatar
-            src={conv.type === "group" ? conv.avatar : peer?.profilePic}
+            src={group ? conv.avatar : peer?.profilePic}
             name={title}
-            seed={conv.type === "group" ? conv._id : peer?._id}
-            group={conv.type === "group"}
+            seed={group ? conv._id : peer?._id}
+            group={group}
+            self={self}
             size={40}
             online={online}
             transitionName={wide ? undefined : "chat-avatar"}
           />
           <span className="min-w-0">
-            <span className="block truncate text-[0.98rem] font-semibold leading-tight" style={wide ? undefined : { viewTransitionName: "chat-title" }}>
+            <span className="block truncate text-[1rem] font-semibold leading-tight" style={wide ? undefined : { viewTransitionName: "chat-title" }}>
               {title}
             </span>
             <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs leading-tight text-base-content/55">
@@ -187,7 +229,7 @@ export default function ChatHeader({ conv }) {
             <Search className="size-5" />
           </button>
         )}
-        <button type="button" className="icon-btn" onClick={(e) => setMenu({ anchor: e.currentTarget })} aria-label="More options">
+        <button type="button" className="icon-btn" onClick={(e) => setMenu({ anchor: e.currentTarget })} aria-label="More options" title="Menu">
           <EllipsisVertical className="size-5" />
         </button>
       </div>

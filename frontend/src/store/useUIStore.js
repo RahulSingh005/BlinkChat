@@ -12,6 +12,10 @@ export const useUIStore = create((set, get) => ({
   remind: null, // message
   schedule: null, // { conversationId, draft }
   messageSheet: null, // { message, conversationId } (mobile long-press menu)
+  messageInfo: null, // { messageId, conversationId }
+  pollVotes: null, // { messageId, conversationId }
+  invite: null, // conversationId (group invite link sheet)
+  shareProfile: false, // my QR code / profile link
   confirm: null, // { title, body, confirmLabel, danger, checkbox, resolve }
 
   open: (key, value = true) => set({ [key]: value }),

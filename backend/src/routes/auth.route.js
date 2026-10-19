@@ -4,6 +4,7 @@ import {
   checkAuth,
   deleteAccount,
   forgotPassword,
+  getSession,
   googleAuth,
   login,
   logout,
@@ -13,7 +14,7 @@ import {
   updateProfile,
   verifyResetOtp,
 } from "../controllers/auth.controller.js";
-import { protectRoute } from "../middleware/auth.middleware.js";
+import { optionalAuth, protectRoute } from "../middleware/auth.middleware.js";
 import { authLimiter, otpRequestLimiter, otpVerifyLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import {
@@ -39,6 +40,7 @@ router.post("/forgot-password", otpRequestLimiter, validate(forgotPasswordSchema
 router.post("/verify-reset-otp", otpVerifyLimiter, validate(verifyOtpSchema), verifyResetOtp);
 router.post("/reset-password", otpVerifyLimiter, validate(resetPasswordSchema), resetPassword);
 
+router.get("/session", optionalAuth, getSession);
 router.get("/check", protectRoute, checkAuth);
 router.put("/profile", protectRoute, validate(updateProfileSchema), updateProfile);
 router.put("/password", protectRoute, validate(changePasswordSchema), changePassword);

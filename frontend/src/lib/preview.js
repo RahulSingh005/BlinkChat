@@ -43,6 +43,10 @@ export function systemText(message, conv, meId) {
       return `${actor} changed the group photo`;
     case "avatar_removed":
       return `${actor} removed the group photo`;
+    case "message_pinned":
+      return `${actor} pinned a message${sys.data?.preview ? `: “${sys.data.preview.slice(0, 60)}”` : ""}`;
+    case "member_joined_link":
+      return `${t || actor} joined using an invite link`;
     case "disappearing":
       return sys.data?.seconds
         ? `${actor} turned on disappearing messages · ${disappearingLabel(sys.data.seconds)}`
@@ -70,12 +74,18 @@ export function previewText(message, { conv, meId } = {}) {
   if (message.type === "call") return callText(message, meId);
   const att = message.attachments?.[0];
   const text = stripFormatting(message.text || "").replace(/\s+/g, " ").trim();
+  if (message.poll) return `📊 ${message.poll.question}`;
+  if (message.location) return `📍 ${message.location.label || "Location"}`;
+  if (message.contactCard) return `👤 ${message.contactCard.name || "Contact"}`;
+  if (message.viewOnce && att) return att.kind === "video" ? "View once video" : "View once photo";
   if (att) {
     const count = message.attachments.length;
     let label;
     if (att.kind === "image") label = count > 1 ? `${count} photos` : "Photo";
     else if (att.kind === "video") label = "Video";
     else if (att.kind === "audio") label = att.voice ? `Voice message${att.duration ? ` (${formatDuration(att.duration)})` : ""}` : "Audio";
+    else if (att.kind === "gif") label = "GIF";
+    else if (att.kind === "sticker") label = "Sticker";
     else label = att.name || "File";
     return text ? `${label} · ${text}` : label;
   }

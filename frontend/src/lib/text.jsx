@@ -43,13 +43,37 @@ function highlight(text, query, keyBase) {
   return out;
 }
 
-function linkify(text, keyBase, query) {
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** @Name mentions (names come from the message's mention list). */
+function mentionize(text, query, keyBase, mentions) {
+  if (!mentions?.length) return highlight(text, query, keyBase);
+  const re = new RegExp(`@(${mentions.map((m) => escapeRe(m.label)).join("|")})(?![\\p{L}\\p{N}])`, "giu");
+  const out = [];
+  let last = 0;
+  let k = 0;
+  for (const match of text.matchAll(re)) {
+    if (match.index > last) out.push(<Fragment key={`${keyBase}-x${k++}`}>{highlight(text.slice(last, match.index), query, `${keyBase}-q${k}`)}</Fragment>);
+    const me = mentions.find((m) => m.label.toLowerCase() === match[1].toLowerCase())?.me;
+    out.push(
+      <span key={`${keyBase}-@${k++}`} className={`mention ${me ? "mention-me" : ""}`}>
+        {match[0]}
+      </span>
+    );
+    last = match.index + match[0].length;
+  }
+  if (!out.length) return highlight(text, query, keyBase);
+  if (last < text.length) out.push(<Fragment key={`${keyBase}-x${k}`}>{highlight(text.slice(last), query, `${keyBase}-q${k}`)}</Fragment>);
+  return out;
+}
+
+function linkify(text, keyBase, query, mentions) {
   const nodes = [];
   let last = 0;
   let k = 0;
   for (const match of text.matchAll(URL_RE)) {
     const url = match[0];
-    if (match.index > last) nodes.push(<Fragment key={`${keyBase}-t${k++}`}>{highlight(text.slice(last, match.index), query, `${keyBase}-h${k}`)}</Fragment>);
+    if (match.index > last) nodes.push(<Fragment key={`${keyBase}-t${k++}`}>{mentionize(text.slice(last, match.index), query, `${keyBase}-h${k}`, mentions)}</Fragment>);
     const href = url.startsWith("http") ? url : `https://${url}`;
     nodes.push(
       <a key={`${keyBase}-a${k++}`} href={href} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => e.stopPropagation()}>
@@ -58,45 +82,46 @@ function linkify(text, keyBase, query) {
     );
     last = match.index + url.length;
   }
-  if (last < text.length) nodes.push(<Fragment key={`${keyBase}-t${k}`}>{highlight(text.slice(last), query, `${keyBase}-h${k}`)}</Fragment>);
+  if (last < text.length) nodes.push(<Fragment key={`${keyBase}-t${k}`}>{mentionize(text.slice(last), query, `${keyBase}-h${k}`, mentions)}</Fragment>);
   return nodes;
 }
 
-function styled(text, keyBase, query) {
+function styled(text, keyBase, query, mentions) {
   const nodes = [];
   let last = 0;
   let k = 0;
   for (const m of text.matchAll(STYLE_RE)) {
     const [whole, lead, marker, inner] = m;
     const start = m.index + lead.length;
-    if (start > last) nodes.push(...linkify(text.slice(last, start), `${keyBase}-p${k++}`, query));
-    const children = styled(inner, `${keyBase}-i${k}`, query);
+    if (start > last) nodes.push(...linkify(text.slice(last, start), `${keyBase}-p${k++}`, query, mentions));
+    const children = styled(inner, `${keyBase}-i${k}`, query, mentions);
     const Tag = marker === "*" ? "strong" : marker === "_" ? "em" : "s";
     nodes.push(<Tag key={`${keyBase}-s${k++}`}>{children}</Tag>);
     last = m.index + whole.length;
   }
-  if (last < text.length) nodes.push(...linkify(text.slice(last), `${keyBase}-p${k}`, query));
+  if (last < text.length) nodes.push(...linkify(text.slice(last), `${keyBase}-p${k}`, query, mentions));
   return nodes;
 }
 
-function inlineCode(text, keyBase, query) {
+function inlineCode(text, keyBase, query, mentions) {
   const parts = text.split(/(`[^`\n]+`)/g);
   return parts.map((part, i) =>
     part.startsWith("`") && part.endsWith("`") && part.length > 2 ? (
       <code key={`${keyBase}-c${i}`}>{part.slice(1, -1)}</code>
     ) : (
-      <Fragment key={`${keyBase}-f${i}`}>{styled(part, `${keyBase}-f${i}`, query)}</Fragment>
+      <Fragment key={`${keyBase}-f${i}`}>{styled(part, `${keyBase}-f${i}`, query, mentions)}</Fragment>
     )
   );
 }
 
-export function renderMessageText(text = "", { query = "" } = {}) {
+/** `mentions`: [{ label: "Ava", me: false }] — highlighted as @Ava. */
+export function renderMessageText(text = "", { query = "", mentions = null } = {}) {
   const blocks = text.split(/(```[\s\S]*?```)/g);
   return blocks.map((block, i) => {
     if (block.startsWith("```") && block.endsWith("```") && block.length > 6) {
       return <pre key={`b${i}`}>{block.slice(3, -3).replace(/^\n|\n$/g, "")}</pre>;
     }
-    return <Fragment key={`b${i}`}>{inlineCode(block, `b${i}`, query)}</Fragment>;
+    return <Fragment key={`b${i}`}>{inlineCode(block, `b${i}`, query, mentions)}</Fragment>;
   });
 }
 

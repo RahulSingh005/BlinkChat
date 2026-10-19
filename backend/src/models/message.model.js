@@ -2,12 +2,15 @@ import mongoose from "mongoose";
 
 const { ObjectId, Mixed } = mongoose.Schema.Types;
 
-export const ATTACHMENT_KINDS = ["image", "video", "audio", "file"];
+export const ATTACHMENT_KINDS = ["image", "video", "audio", "file", "gif", "sticker"];
 
 const attachmentSchema = new mongoose.Schema(
   {
     kind: { type: String, enum: ATTACHMENT_KINDS, required: true },
     url: { type: String, required: true },
+    // GIFs play as muted looping video when an mp4 rendition exists.
+    mp4: { type: String, default: "" },
+    provider: { type: String, default: "" },
     name: { type: String, default: "" },
     mime: { type: String, default: "" },
     size: { type: Number, default: 0 },
@@ -20,6 +23,28 @@ const attachmentSchema = new mongoose.Schema(
     waveform: { type: [Number], default: undefined },
     publicId: { type: String, default: "" },
     storage: { type: String, enum: ["cloudinary", "local"], default: "local" },
+  },
+  { _id: false }
+);
+
+const pollSchema = new mongoose.Schema(
+  {
+    question: { type: String, required: true, maxlength: 200 },
+    options: {
+      type: [
+        new mongoose.Schema(
+          {
+            id: { type: String, required: true },
+            text: { type: String, required: true, maxlength: 100 },
+            voters: { type: [{ type: ObjectId, ref: "User" }], default: [] },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    multiple: { type: Boolean, default: false },
+    closedAt: { type: Date, default: null },
   },
   { _id: false }
 );
@@ -54,6 +79,65 @@ const messageSchema = new mongoose.Schema(
       default: null,
     },
     forwarded: { type: Boolean, default: false },
+    poll: { type: pollSchema, default: null },
+    location: {
+      type: new mongoose.Schema(
+        {
+          lat: { type: Number, required: true, min: -90, max: 90 },
+          lng: { type: Number, required: true, min: -180, max: 180 },
+          accuracy: { type: Number, default: null },
+          label: { type: String, default: "", maxlength: 120 },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
+    contactCard: {
+      type: new mongoose.Schema(
+        {
+          user: { type: ObjectId, ref: "User", required: true },
+          name: { type: String, default: "" },
+          avatar: { type: String, default: "" },
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
+    linkPreview: {
+      type: new mongoose.Schema(
+        {
+          url: String,
+          title: String,
+          description: String,
+          image: String,
+          siteName: String,
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
+    // Users @mentioned in a group message.
+    mentions: { type: [{ type: ObjectId, ref: "User" }], default: [] },
+    // Per-user bookmarks ("Starred messages").
+    starredBy: { type: [{ type: ObjectId, ref: "User" }], default: [] },
+    // View-once media: URLs are withheld until opened, then it's spent.
+    viewOnce: { type: Boolean, default: false },
+    viewedBy: { type: [{ type: ObjectId, ref: "User" }], default: [] },
+    storyReply: {
+      type: new mongoose.Schema(
+        {
+          story: { type: ObjectId, ref: "Story" },
+          owner: { type: ObjectId, ref: "User" },
+          storyType: { type: String, default: "text" },
+          text: String,
+          background: String,
+          mediaUrl: String,
+          mediaKind: String,
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
     // Breaks through the recipient's mute / focus mode.
     urgent: { type: Boolean, default: false },
     scheduled: { type: Boolean, default: false },
@@ -105,6 +189,8 @@ messageSchema.index(
   { unique: true, partialFilterExpression: { clientId: { $type: "string" } } }
 );
 messageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+messageSchema.index({ starredBy: 1, createdAt: -1 });
+messageSchema.index({ conversation: 1, type: 1, createdAt: -1 });
 
 const Message = mongoose.model("Message", messageSchema);
 

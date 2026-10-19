@@ -1,5 +1,6 @@
 import { env, features } from "../config/env.js";
 import { aiStatus } from "../lib/ai.js";
+import { gifsEnabled } from "../lib/klipy.js";
 import { turnProvider } from "../lib/ice.js";
 import { passwordResetAvailable } from "../lib/mailer.js";
 import { pushEnabled, vapidPublicKey } from "../lib/push.js";
@@ -24,6 +25,9 @@ export const getConfig = (req, res) => {
       storage: features.cloudinary ? "cloudinary" : "local",
       turn: Boolean(turnProvider()),
       publicDirectory: env.PUBLIC_DIRECTORY,
+      gifs: gifsEnabled(),
+      linkPreviews: env.LINK_PREVIEWS,
+      stories: true,
     },
     limits: {
       messageLength: 4000,
@@ -31,6 +35,8 @@ export const getConfig = (req, res) => {
       uploadBytes: SIZE_LIMITS,
       editWindowMs: EDIT_WINDOW_MS,
       groupMembers: GROUP_MAX_MEMBERS,
+      pinnedMessages: 3,
+      pollOptions: 12,
     },
   });
 };

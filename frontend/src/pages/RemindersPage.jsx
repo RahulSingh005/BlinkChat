@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { AlarmClock, Check, Clock3, EllipsisVertical, MessageSquare, Trash2 } from "lucide-react";
-import PageShell from "../components/layout/PageShell";
+import PanelHeader from "../components/layout/PanelHeader";
+import SplitView, { DetailPlaceholder } from "../components/layout/SplitView";
 import Menu from "../components/ui/Menu";
 import { ConversationSkeleton } from "../components/ui/Skeletons";
 import { useNow } from "../hooks/useNow";
@@ -32,8 +33,10 @@ function ReminderItem({ r, due, onOpen, index }) {
 
   return (
     <li className="anim-cascade" style={{ "--i": index }}>
-      <div className={`flex gap-3 rounded-2xl border bg-base-100 p-3.5 ${due ? "border-warning/40" : "border-base-300/70"}`}>
-        <span className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${due ? "bg-warning/15 text-warning" : "bg-base-200 text-base-content/60"}`}>
+      <div className={`flex gap-3 rounded-2xl p-3 transition hover:bg-base-content/[0.03] ${due ? "bg-warning/[0.07]" : ""}`}>
+        <span
+          className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${due ? "bg-warning/15 text-warning" : "bg-base-200 text-base-content/60"}`}
+        >
           {due ? <AlarmClock className="size-5" /> : <Clock3 className="size-5" />}
         </span>
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
@@ -75,7 +78,7 @@ function ReminderItem({ r, due, onOpen, index }) {
   );
 }
 
-export default function RemindersPage() {
+function RemindersList() {
   const navigate = useNavigate();
   const items = useReminderStore((s) => s.items);
   const loaded = useReminderStore((s) => s.loaded);
@@ -86,41 +89,61 @@ export default function RemindersPage() {
   const open = (r) => navigate(`/chat/${r.conversation}?message=${r.message}`);
 
   return (
-    <PageShell title="Reminders" subtitle="Messages you asked BlinkChat to bring back">
-      {!loaded ? (
-        <ConversationSkeleton rows={4} />
-      ) : !items.length ? (
-        <div className="anim-fade mx-auto max-w-sm py-16 text-center">
-          <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-base-100 text-base-content/50 shadow-soft">
-            <AlarmClock className="size-6" />
-          </span>
-          <h2 className="font-semibold">No reminders yet</h2>
-          <p className="mt-1 text-sm text-base-content/55">Long-press (or right-click) any message and choose “Remind me” to get it back at the right time.</p>
-        </div>
-      ) : (
-        <>
-          {due.length > 0 && (
-            <section>
-              <h2 className="section-title">Due</h2>
-              <ul className="space-y-2">
-                {due.map((r, i) => (
-                  <ReminderItem key={r._id} r={r} due index={i} onOpen={() => open(r)} />
-                ))}
-              </ul>
-            </section>
-          )}
-          {upcoming.length > 0 && (
-            <section>
-              <h2 className="section-title">Upcoming</h2>
-              <ul className="space-y-2">
-                {upcoming.map((r, i) => (
-                  <ReminderItem key={r._id} r={r} index={i + due.length} onOpen={() => open(r)} />
-                ))}
-              </ul>
-            </section>
-          )}
-        </>
-      )}
-    </PageShell>
+    <div className="flex h-full min-h-0 w-full flex-col bg-base-100">
+      <PanelHeader title="Reminders" subtitle="Messages you asked BlinkChat to bring back" />
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-2 pb-28 pt-2 md:pb-4">
+        {!loaded ? (
+          <ConversationSkeleton rows={4} />
+        ) : !items.length ? (
+          <div className="anim-fade mx-auto max-w-xs px-4 py-14 text-center">
+            <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-base-200 text-base-content/50">
+              <AlarmClock className="size-6" />
+            </span>
+            <h2 className="font-semibold">No reminders yet</h2>
+            <p className="mt-1 text-sm text-base-content/55">
+              Long-press (or right-click) any message and choose “Remind me” to get it back at the right time.
+            </p>
+          </div>
+        ) : (
+          <>
+            {due.length > 0 && (
+              <section>
+                <h2 className="px-2 pb-1 text-[0.8125rem] font-semibold text-warning">Due</h2>
+                <ul className="space-y-1">
+                  {due.map((r, i) => (
+                    <ReminderItem key={r._id} r={r} due index={i} onOpen={() => open(r)} />
+                  ))}
+                </ul>
+              </section>
+            )}
+            {upcoming.length > 0 && (
+              <section>
+                <h2 className="px-2 pb-1 text-[0.8125rem] font-semibold text-base-content/55">Upcoming</h2>
+                <ul className="space-y-1">
+                  {upcoming.map((r, i) => (
+                    <ReminderItem key={r._id} r={r} index={i + due.length} onOpen={() => open(r)} />
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function RemindersPage() {
+  return (
+    <SplitView
+      list={<RemindersList />}
+      detail={
+        <DetailPlaceholder
+          icon={AlarmClock}
+          title="Never forget to reply"
+          body="Right-click (or long-press) any message and pick “Remind me”. BlinkChat brings it back right on time, even if the app is closed."
+        />
+      }
+    />
   );
 }

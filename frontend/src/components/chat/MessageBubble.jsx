@@ -1,31 +1,60 @@
 import { memo, useRef, useState } from "react";
-import { Ban, CalendarClock, CircleAlert, Forward, Languages, Reply, SmilePlus, Siren, EllipsisVertical, AudioLines } from "lucide-react";
+import { AudioLines, Ban, CalendarClock, CircleAlert, EllipsisVertical, Forward, Languages, Reply, Siren, SmilePlus, Star } from "lucide-react";
 import Avatar from "../ui/Avatar";
 import FileCard from "./FileCard";
 import MediaGrid from "./MediaGrid";
 import ReceiptIcon from "./ReceiptIcon";
 import VoicePlayer from "./VoicePlayer";
+import { ContactCard, GifMedia, LinkPreviewCard, LocationCard, PollCard, StickerMedia, StoryReplyQuote, ViewOnceTile } from "./RichContent";
 import { useLongPress } from "../../hooks/useLongPress";
 import { nameColor } from "../../lib/avatar";
 import { formatTime } from "../../lib/format";
 import { vibrate } from "../../lib/platform";
 import { isEmojiOnly, renderMessageText } from "../../lib/text";
 
-
-const KIND_LABEL = { image: "Photo", video: "Video", audio: "Voice message", file: "File", call: "Call" };
+const KIND_LABEL = {
+  image: "📷 Photo",
+  video: "🎥 Video",
+  audio: "🎤 Voice message",
+  file: "📎 File",
+  call: "📞 Call",
+  gif: "GIF",
+  sticker: "Sticker",
+  poll: "📊 Poll",
+  location: "📍 Location",
+  contact: "👤 Contact",
+};
 
 function Meta({ m, mine, receipt, onMedia = false }) {
   return (
     <span
       className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] leading-none ${
-        onMedia ? "rounded-full bg-black/45 px-1.5 py-1 text-white" : mine ? "text-primary-content/75" : "text-base-content/45"
+        onMedia ? "rounded-full bg-black/45 px-1.5 py-1 text-white" : mine ? "text-bubble-out-content/70" : "text-base-content/45"
       }`}
     >
+      {m.starred && <Star className="size-3 fill-current" aria-label="Starred" />}
       {m.scheduled && <CalendarClock className="size-3" aria-label="Scheduled" />}
       {m.editedAt && !m.deletedAt && <span>edited</span>}
       <time dateTime={m.createdAt}>{formatTime(m.createdAt)}</time>
-      {mine && <ReceiptIcon status={receipt} className="size-[15px]" readClass={onMedia ? "text-cyan-300" : "text-cyan-200"} />}
+      {mine && <ReceiptIcon status={receipt} className="size-4" readClass={onMedia ? "text-sky-300" : "tick-read"} />}
     </span>
+  );
+}
+
+/** Telegram-style bubble tail on the last message of a group. */
+function Tail({ mine }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 9 16"
+      width="9"
+      height="16"
+      fill="currentColor"
+      className={`pointer-events-none absolute bottom-0 ${mine ? "-right-2 -scale-x-100 text-bubble-out" : "-left-2 text-bubble-in"}`}
+      style={{ filter: "drop-shadow(0 1px 0.5px rgb(0 0 0 / 0.1))" }}
+    >
+      <path d="M9 0v16H1.6C.7 16 .3 15 .9 14.4 6 9.4 9 5 9 0Z" />
+    </svg>
   );
 }
 
@@ -40,7 +69,7 @@ function ReplyQuote({ reply, mine, nameOf, onJump }) {
         onJump(reply.message);
       }}
       className={`mx-1 mt-1 flex min-w-[150px] gap-2 overflow-hidden rounded-[10px] py-1.5 pl-2 pr-3 text-left transition ${
-        mine ? "bg-primary-content/15 hover:bg-primary-content/20" : "bg-base-content/[0.05] hover:bg-base-content/[0.08]"
+        mine ? "bg-bubble-out-content/[0.12] hover:bg-bubble-out-content/[0.18]" : "bg-base-content/[0.05] hover:bg-base-content/[0.08]"
       }`}
     >
       <span className="w-[3px] shrink-0 rounded-full" style={{ background: color || "currentColor", opacity: mine ? 0.7 : 1 }} />
@@ -62,7 +91,7 @@ function Reactions({ reactions, meId, mine, nameOf, onReact }) {
     g.users.push(r.user);
   }
   return (
-    <div className={`relative z-[1] -mt-2 flex flex-wrap gap-1 px-2 ${mine ? "justify-end" : "justify-start"}`}>
+    <div className={`relative z-[1] -mt-1.5 flex flex-wrap gap-1 px-2 ${mine ? "justify-end" : "justify-start"}`}>
       {groups.map((g) => {
         const byMe = g.users.includes(meId);
         return (
@@ -100,27 +129,36 @@ function MessageBubble({
   canTranscribe,
   cascade,
   actions,
+  showLinkPreview = true,
+  autoplayGifs = true,
 }) {
   const [dx, setDx] = useState(0);
   const swipe = useRef(null);
   const longPress = useLongPress((e, target) => actions.onMenu(m, target, true));
 
   const deleted = Boolean(m.deletedAt);
-  const media = m.attachments.filter((a) => a.kind === "image" || a.kind === "video");
-  const audio = m.attachments.find((a) => a.kind === "audio");
-  const files = m.attachments.filter((a) => a.kind === "file");
+  const atts = deleted ? [] : m.attachments || [];
+  const viewOnce = m.viewOnce && !deleted;
+  const gif = atts.find((a) => a.kind === "gif");
+  const sticker = atts.find((a) => a.kind === "sticker");
+  const media = viewOnce ? [] : atts.filter((a) => a.kind === "image" || a.kind === "video");
+  const audio = atts.find((a) => a.kind === "audio");
+  const files = atts.filter((a) => a.kind === "file");
   const hasText = Boolean(m.text) && !deleted;
-  const bigEmoji = hasText && !m.attachments.length && !m.replyTo && isEmojiOnly(m.text);
-  const mediaOnly = media.length > 0 && !hasText && !audio && !files.length;
-  const uploading = m.status === "pending" && m.attachments.some((a) => a.local);
+  const special = !deleted && (m.poll || m.location || m.contactCard);
+  const bigEmoji = hasText && !atts.length && !m.replyTo && !special && !m.storyReply && isEmojiOnly(m.text);
+  const stickerOnly = Boolean(sticker) && !hasText && !m.replyTo;
+  const mediaOnly = (media.length > 0 || Boolean(gif)) && !hasText && !audio && !files.length && !special && !m.replyTo && !m.storyReply;
+  const bare = bigEmoji || stickerOnly;
+  const tail = groupEnd && !bare && !mediaOnly;
+  const uploading = m.status === "pending" && atts.some((a) => a.local);
+  const mentionLabels = m.mentions?.length ? m.mentions.map((id) => ({ label: actions.mentionLabel(id), me: id === meId })).filter((x) => x.label) : null;
 
   const anim = cascade !== undefined ? "anim-cascade" : m.fresh ? (mine ? "anim-pop" : "anim-in-left") : "";
-  const radius = mine ? (groupEnd ? "rounded-[18px] rounded-br-[6px]" : "rounded-[18px]") : groupEnd ? "rounded-[18px] rounded-bl-[6px]" : "rounded-[18px]";
-  const surface = bigEmoji
-    ? ""
-    : mine
-      ? "bg-primary text-primary-content shadow-bubble"
-      : "border border-bubble-in-border/70 bg-bubble-in text-base-content shadow-bubble";
+  const corners = mine
+    ? `${groupStart ? "" : "rounded-tr-[6px]"} ${tail ? "rounded-br-none" : groupEnd ? "" : "rounded-br-[6px]"}`
+    : `${groupStart ? "" : "rounded-tl-[6px]"} ${tail ? "rounded-bl-none" : groupEnd ? "" : "rounded-bl-[6px]"}`;
+  const surface = bare ? "" : mine ? "msg-out bg-bubble-out text-bubble-out-content shadow-bubble" : "bg-bubble-in text-base-content shadow-bubble";
 
   // Swipe right to reply (touch).
   const onPointerDown = (e) => {
@@ -157,10 +195,12 @@ function MessageBubble({
     setDx(0);
   };
 
+  const topPad = m.replyTo || showName || m.forwarded || m.urgent || m.storyReply;
+
   return (
     <div
       data-mid={m._id}
-      className={`group/row relative flex items-end gap-2 rounded-xl px-2 md:px-4 ${mine ? "justify-end" : "justify-start"} ${groupStart ? "mt-2" : "mt-[3px]"} ${anim}`}
+      className={`group/row relative flex items-end gap-2 rounded-xl ${mine ? "justify-end" : "justify-start"} ${groupStart ? "mt-2" : "mt-[3px]"} ${anim}`}
       style={{ "--i": cascade, touchAction: "pan-y" }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -168,18 +208,15 @@ function MessageBubble({
       onPointerCancel={endSwipe}
       onClickCapture={longPress.onClickCapture}
       onContextMenu={(e) => {
-        if (e.nativeEvent.pointerType === "touch") {
-          e.preventDefault();
-          return;
-        }
         e.preventDefault();
+        if (e.nativeEvent.pointerType === "touch") return;
         actions.onMenu(m, { x: e.clientX, y: e.clientY });
       }}
     >
       {/* swipe-to-reply affordance */}
       {dx > 0 && (
         <span
-          className="absolute left-3 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-base-content/10 text-base-content/70"
+          className="absolute left-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-base-content/10 text-base-content/70"
           style={{ opacity: Math.min(1, dx / 56), transform: `translateY(-50%) scale(${0.6 + Math.min(0.4, dx / 140)})` }}
         >
           <Reply className="size-4" />
@@ -188,135 +225,161 @@ function MessageBubble({
 
       {isGroup && !mine && (
         <div className="w-8 shrink-0 self-end">
-          {showAvatar && <Avatar src={sender?.profilePic} name={sender?.fullName} seed={m.sender} size={32} />}
+          {showAvatar && (
+            <button type="button" onClick={() => actions.onOpenProfile?.(m.sender)} className="rounded-full" aria-label={`Message ${sender?.fullName || ""}`}>
+              <Avatar src={sender?.profilePic} name={sender?.fullName} seed={m.sender} size={32} />
+            </button>
+          )}
         </div>
       )}
 
       <div
-        className={`relative flex min-w-0 max-w-[min(80%,34rem)] flex-col ${mine ? "items-end" : "items-start"}`}
+        className={`relative flex min-w-0 max-w-[86%] flex-col sm:max-w-[75%] lg:max-w-[min(65%,600px)] ${mine ? "items-end" : "items-start"}`}
         style={dx ? { transform: `translateX(${dx}px)` } : { transition: "transform 0.25s var(--spring)" }}
       >
-        <div
-          className={`relative min-w-0 max-w-full overflow-hidden ${radius} ${surface} ${
-            m.status === "failed" ? "opacity-70" : ""
-          } [-webkit-touch-callout:none] [@media(pointer:coarse)]:select-none`}
-        >
-          {showName && !mine && !bigEmoji && (
-            <div className="truncate px-3 pt-1.5 text-[0.8125rem] font-semibold" style={{ color: nameColor(m.sender) }}>
-              {sender?.fullName || "Deleted account"}
-            </div>
-          )}
-          {(m.forwarded || m.urgent) && !deleted && (
-            <div className={`flex items-center gap-1 px-3 pt-1.5 text-[11px] font-medium ${mine ? "text-primary-content/75" : "text-base-content/50"}`}>
-              {m.urgent && (
-                <span className={`flex items-center gap-1 rounded px-1 py-px font-bold uppercase tracking-wide ${mine ? "bg-primary-content/20" : "bg-error/15 text-error"}`}>
-                  <Siren className="size-3" /> Urgent
+        <div className="relative max-w-full">
+          <div
+            className={`relative min-w-0 max-w-full overflow-hidden rounded-[18px] ${corners} ${surface} ${
+              m.status === "failed" ? "opacity-70" : ""
+            } [-webkit-touch-callout:none] [@media(pointer:coarse)]:select-none`}
+          >
+            {showName && !mine && !bare && (
+              <div className="truncate px-3 pt-1.5 text-[0.8125rem] font-semibold" style={{ color: nameColor(m.sender) }}>
+                {sender?.fullName || "Deleted account"}
+              </div>
+            )}
+            {(m.forwarded || m.urgent) && !deleted && (
+              <div className={`flex items-center gap-1 px-3 pt-1.5 text-[11px] font-medium ${mine ? "text-bubble-out-content/75" : "text-base-content/50"}`}>
+                {m.urgent && (
+                  <span className={`flex items-center gap-1 rounded px-1 py-px font-bold uppercase tracking-wide ${mine ? "bg-bubble-out-content/20" : "bg-error/15 text-error"}`}>
+                    <Siren className="size-3" /> Urgent
+                  </span>
+                )}
+                {m.forwarded && (
+                  <span className="flex items-center gap-1 italic">
+                    <Forward className="size-3" /> Forwarded
+                  </span>
+                )}
+              </div>
+            )}
+
+            {deleted ? (
+              <div className={`flex items-center gap-1.5 px-3 py-2 text-[0.9rem] italic ${mine ? "text-bubble-out-content/80" : "text-base-content/50"}`}>
+                <Ban className="size-4" />
+                This message was deleted
+                <span className="ml-1 not-italic">
+                  <Meta m={m} mine={mine} receipt={receipt} />
                 </span>
-              )}
-              {m.forwarded && (
-                <span className="flex items-center gap-1 italic">
-                  <Forward className="size-3" /> Forwarded
-                </span>
-              )}
-            </div>
-          )}
+              </div>
+            ) : (
+              <>
+                {m.storyReply && <StoryReplyQuote reply={m.storyReply} mine={mine} ownerName={actions.nameOf(m.storyReply.owner)} />}
+                {m.replyTo && <ReplyQuote reply={m.replyTo} mine={mine} nameOf={actions.nameOf} onJump={actions.onJump} />}
 
-          {deleted ? (
-            <div className={`flex items-center gap-1.5 px-3 py-2 text-[0.9rem] italic ${mine ? "text-primary-content/80" : "text-base-content/50"}`}>
-              <Ban className="size-4" />
-              This message was deleted
-              <span className="ml-1 not-italic">
-                <Meta m={m} mine={mine} receipt={receipt} />
-              </span>
-            </div>
-          ) : (
-            <>
-              {m.replyTo && <ReplyQuote reply={m.replyTo} mine={mine} nameOf={actions.nameOf} onJump={actions.onJump} />}
-
-              {media.length > 0 && (
-                <div className={`relative ${m.replyTo || showName || m.forwarded ? "mt-1" : ""}`}>
-                  <MediaGrid attachments={media} uploading={uploading} onOpen={(i) => actions.onOpenMedia(m, media, i)} />
-                  {mediaOnly && (
-                    <span className="pointer-events-none absolute bottom-1.5 right-1.5">
-                      <Meta m={m} mine={mine} receipt={receipt} onMedia />
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {audio && (
-                <div className="px-2 pt-1.5">
-                  <VoicePlayer att={audio} mine={mine} />
-                  {m.transcript ? (
-                    <p className={`mt-1 border-t px-1 pb-0.5 pt-1.5 text-[0.85rem] leading-snug ${mine ? "border-primary-content/20" : "border-base-content/10"}`}>
-                      {m.transcript}
-                    </p>
-                  ) : (
-                    canTranscribe &&
-                    !m.status && (
-                      <button
-                        type="button"
-                        onClick={() => actions.onTranscribe(m)}
-                        className={`mt-1 flex items-center gap-1 px-1 text-xs font-medium ${mine ? "text-primary-content/80" : "text-primary"}`}
-                      >
-                        <AudioLines className="size-3.5" /> Transcribe
-                      </button>
-                    )
-                  )}
-                </div>
-              )}
-
-              {files.length > 0 && (
-                <div className="space-y-1 px-1.5 pt-1.5">
-                  {files.map((f, i) => (
-                    <FileCard key={`${f.url}-${i}`} att={f} mine={mine} />
-                  ))}
-                </div>
-              )}
-
-              {hasText ? (
-                <div className={`msg-text relative ${bigEmoji ? "msg-big-emoji px-1" : "px-3 pb-[7px] pt-[6px] text-[0.95rem]"}`}>
-                  {renderMessageText(m.text, { query })}
-                  {bigEmoji ? (
-                    <span className="block text-right">
-                      <Meta m={m} mine={false} receipt={receipt} />
-                    </span>
-                  ) : (
-                    <>
-                      <span className="invisible ml-2 inline-flex select-none" aria-hidden="true">
-                        <Meta m={m} mine={mine} receipt={receipt} />
-                      </span>
-                      <span className="absolute bottom-[5px] right-2.5">
-                        <Meta m={m} mine={mine} receipt={receipt} />
-                      </span>
-                    </>
-                  )}
-                </div>
-              ) : (
-                !mediaOnly && (
-                  <div className="flex justify-end px-3 pb-1.5 pt-1">
-                    <Meta m={m} mine={mine} receipt={receipt} />
+                {stickerOnly ? (
+                  <div className="flex flex-col items-end gap-1">
+                    <StickerMedia att={sticker} />
+                    <Meta m={m} mine={false} receipt={receipt} />
                   </div>
-                )
-              )}
+                ) : (
+                  <>
+                    {(media.length > 0 || gif) && (
+                      <div className={`relative ${topPad ? "mt-1" : ""}`}>
+                        {gif ? (
+                          <GifMedia att={gif} autoplay={autoplayGifs} onOpen={() => actions.onOpenMedia(m, [{ ...gif, kind: "image" }], 0)} />
+                        ) : (
+                          <MediaGrid attachments={media} uploading={uploading} onOpen={(i) => actions.onOpenMedia(m, media, i)} />
+                        )}
+                        {mediaOnly && (
+                          <span className="pointer-events-none absolute bottom-1.5 right-1.5">
+                            <Meta m={m} mine={mine} receipt={receipt} onMedia />
+                          </span>
+                        )}
+                      </div>
+                    )}
 
-              {translation && !mine && (translation.text || translation.loading) && (
-                <div className="mx-3 mb-2 border-t border-base-content/10 pt-1.5">
-                  <div className="mb-0.5 flex items-center gap-1 text-[11px] font-medium text-base-content/45">
-                    <Languages className="size-3" /> Translated
-                  </div>
-                  {translation.loading ? (
-                    <div className="space-y-1.5 py-1">
-                      <div className="skeleton-line h-2.5 w-44" />
-                      <div className="skeleton-line h-2.5 w-28" />
-                    </div>
-                  ) : (
-                    <p className="msg-text text-[0.92rem]">{translation.text}</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+                    {viewOnce && <ViewOnceTile message={m} mine={mine} meId={meId} onOpen={actions.onOpenViewOnce} />}
+                    {m.poll && <PollCard message={m} mine={mine} meId={meId} onVote={actions.onVote} onEnd={actions.onEndPoll} onShowVotes={actions.onShowVotes} />}
+                    {m.location && <LocationCard location={m.location} mine={mine} />}
+                    {m.contactCard && <ContactCard card={m.contactCard} mine={mine} isMe={m.contactCard.user === meId} onMessage={actions.onMessageContact} />}
+
+                    {audio && (
+                      <div className="px-2 pt-1.5">
+                        <VoicePlayer att={audio} mine={mine} />
+                        {m.transcript ? (
+                          <p className={`mt-1 border-t px-1 pb-0.5 pt-1.5 text-[0.85rem] leading-snug ${mine ? "border-bubble-out-content/20" : "border-base-content/10"}`}>{m.transcript}</p>
+                        ) : (
+                          canTranscribe &&
+                          !m.status && (
+                            <button
+                              type="button"
+                              onClick={() => actions.onTranscribe(m)}
+                              className={`mt-1 flex items-center gap-1 px-1 text-xs font-medium ${mine ? "text-bubble-out-content/80" : "text-primary"}`}
+                            >
+                              <AudioLines className="size-3.5" /> Transcribe
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
+
+                    {files.length > 0 && (
+                      <div className="space-y-1 px-1.5 pt-1.5">
+                        {files.map((f, i) => (
+                          <FileCard key={`${f.url}-${i}`} att={f} mine={mine} />
+                        ))}
+                      </div>
+                    )}
+
+                    {hasText && showLinkPreview && m.linkPreview && <LinkPreviewCard preview={m.linkPreview} mine={mine} />}
+
+                    {hasText ? (
+                      <div className={`msg-text relative ${bigEmoji ? "msg-big-emoji px-1" : "px-3 pb-[7px] pt-[6px] text-[0.95rem]"}`}>
+                        {renderMessageText(m.text, { query, mentions: mentionLabels })}
+                        {bigEmoji ? (
+                          <span className="block text-right">
+                            <Meta m={m} mine={false} receipt={receipt} />
+                          </span>
+                        ) : (
+                          <>
+                            <span className="invisible ml-2 inline-flex select-none" aria-hidden="true">
+                              <Meta m={m} mine={mine} receipt={receipt} />
+                            </span>
+                            <span className="absolute bottom-[5px] right-2.5">
+                              <Meta m={m} mine={mine} receipt={receipt} />
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      !mediaOnly && (
+                        <div className="flex justify-end px-3 pb-1.5 pt-1">
+                          <Meta m={m} mine={mine} receipt={receipt} />
+                        </div>
+                      )
+                    )}
+
+                    {translation && !mine && (translation.text || translation.loading) && (
+                      <div className="mx-3 mb-2 border-t border-base-content/10 pt-1.5">
+                        <div className="mb-0.5 flex items-center gap-1 text-[11px] font-medium text-base-content/45">
+                          <Languages className="size-3" /> Translated
+                        </div>
+                        {translation.loading ? (
+                          <div className="space-y-1.5 py-1">
+                            <div className="skeleton-line h-2.5 w-44" />
+                            <div className="skeleton-line h-2.5 w-28" />
+                          </div>
+                        ) : (
+                          <p className="msg-text text-[0.92rem]">{translation.text}</p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+          {tail && <Tail mine={mine} />}
         </div>
 
         {m.reactions?.length > 0 && !deleted && (
@@ -333,7 +396,7 @@ function MessageBubble({
         {!deleted && !m.status && (
           <div
             className={`absolute top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-full border border-base-300/80 bg-base-100 p-0.5 opacity-0 shadow-soft transition-opacity duration-150 group-hover/row:opacity-100 [@media(hover:hover)]:flex ${
-              mine ? "right-full mr-2" : "left-full ml-2"
+              mine ? "right-full mr-3" : "left-full ml-3"
             } ${m.reactions?.length ? "-mt-2" : ""}`}
           >
             <button type="button" className="icon-btn icon-btn-sm size-7" onClick={(e) => actions.onReactMenu(m, e.currentTarget)} aria-label="React">

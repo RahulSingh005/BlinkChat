@@ -1,18 +1,16 @@
-/** Scrollable page frame for Settings, Profile and Reminders. */
-export default function PageShell({ title, subtitle, actions, children }) {
+import PanelHeader from "./PanelHeader";
+
+/**
+ * Detail page frame (settings sections and similar): the shared 60px
+ * header with an optional back button, and a scrollable body whose cards
+ * use the full pane width up to a comfortable reading measure.
+ */
+export default function SectionShell({ title, subtitle, onBack, backLabel, actions, children }) {
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col bg-base-200/40">
-      <header className="safe-top shrink-0 border-b border-base-300/60 bg-base-100/90 backdrop-blur md:border-none md:bg-transparent">
-        <div className="mx-auto flex w-full max-w-2xl items-end gap-3 px-4 pb-3 pt-4 md:px-6 md:pt-8">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-[1.6rem] font-bold tracking-tight">{title}</h1>
-            {subtitle && <p className="mt-0.5 text-sm text-base-content/55">{subtitle}</p>}
-          </div>
-          {actions}
-        </div>
-      </header>
+    <div className="flex min-h-0 w-full flex-1 flex-col bg-base-200">
+      <PanelHeader title={title} subtitle={subtitle} onBack={onBack} backLabel={backLabel} actions={actions} size="md" border />
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className="anim-fade mx-auto w-full max-w-2xl space-y-6 px-4 pb-28 pt-4 md:px-6 md:pb-12">{children}</div>
+        <div className="anim-fade mx-auto w-full max-w-3xl space-y-6 px-4 pb-24 pt-5 md:px-8 md:pb-10">{children}</div>
       </div>
     </div>
   );
@@ -23,11 +21,11 @@ export function Card({ title, description, children, className = "" }) {
     <section>
       {title && (
         <div className="mb-2 px-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{title}</h2>
+          <h2 className="text-[0.8125rem] font-semibold text-base-content/60">{title}</h2>
           {description && <p className="mt-0.5 text-[0.8125rem] text-base-content/50">{description}</p>}
         </div>
       )}
-      <div className={`divide-y divide-base-300/60 overflow-hidden rounded-2xl border border-base-300/70 bg-base-100 ${className}`}>{children}</div>
+      <div className={`divide-y divide-base-300/60 overflow-hidden rounded-2xl border border-base-300/60 bg-base-100 ${className}`}>{children}</div>
     </section>
   );
 }

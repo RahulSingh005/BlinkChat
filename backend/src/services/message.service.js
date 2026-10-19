@@ -3,10 +3,13 @@ import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
 import { badRequest, forbidden, gone, notFound } from "../lib/errors.js";
 import { emitToUser, emitToUsers, hasVisibleSocket, isOnline } from "../lib/realtime.js";
-import { isBlockedEitherWay } from "../lib/cache.js";
+import { env } from "../config/env.js";
+import { invalidateContacts, isBlockedEitherWay } from "../lib/cache.js";
 import { sendPushToUser } from "../lib/push.js";
 import { messagePreview, serializeMessage } from "../lib/serializers.js";
 import { isTrustedMediaUrl } from "../lib/storage.js";
+import { verifyMediaSignature } from "../lib/klipy.js";
+import { firstUrl, unfurl } from "../lib/unfurl.js";
 import { idStr, isActiveUntil, sameId, toObjectId, truncate } from "../lib/utils.js";
 
 export const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -14,7 +17,7 @@ const URGENT_PER_HOUR = 3;
 
 /** Throws unless `senderId` may post in this conversation right now. */
 export async function assertCanSend(conv, senderId) {
-  if (conv.type !== "direct") return;
+  if (conv.type !== "direct") return; // groups and "Saved Messages"
   const peer = conv.members.find((m) => !sameId(m.user, senderId));
   if (!peer) throw gone("This chat is no longer available");
   const peerExists = await User.exists({ _id: peer.user });
@@ -26,11 +29,17 @@ export async function assertCanSend(conv, senderId) {
 
 export function validateAttachments(attachments = []) {
   for (const att of attachments) {
-    if (!isTrustedMediaUrl(att.url)) throw badRequest("Attachment must be uploaded through BlinkChat first");
+    if (att.kind === "gif" || att.kind === "sticker") {
+      if (!verifyMediaSignature(att)) throw badRequest("That GIF couldn't be verified. Pick it again from the GIF panel.");
+    } else if (!isTrustedMediaUrl(att.url)) {
+      throw badRequest("Attachment must be uploaded through BlinkChat first");
+    }
   }
   return attachments.map((a) => ({
     kind: a.kind,
     url: a.url,
+    mp4: a.kind === "gif" ? a.mp4 || "" : "",
+    provider: a.kind === "gif" || a.kind === "sticker" ? a.provider || "klipy" : "",
     name: truncate(a.name || "", 200),
     mime: a.mime || "",
     size: a.size || 0,
@@ -88,6 +97,12 @@ export async function createMessage({
   system = null,
   call = null,
   scheduled = false,
+  poll = null,
+  location = null,
+  contactCard = null,
+  mentions = [],
+  viewOnce = false,
+  storyReply = null,
   countsAsUnread = type === "user",
   notify = type === "user",
 }) {
@@ -109,6 +124,13 @@ export async function createMessage({
     clientId: clientId || undefined,
     system,
     call,
+    poll,
+    location,
+    contactCard,
+    // Only people actually in this group can be mentioned.
+    mentions: conv.type === "group" ? uniqueMentionIds(conv, mentions, senderId) : [],
+    viewOnce: Boolean(viewOnce) && attachments.some((a) => a.kind === "image" || a.kind === "video"),
+    storyReply,
   };
   if (conv.disappearingSeconds > 0 && type !== "system") {
     doc.expiresAt = new Date(Date.now() + conv.disappearingSeconds * 1000);
@@ -144,6 +166,10 @@ export async function createMessage({
   }
   const update = { $set };
   if (countsAsUnread) update.$inc = { "members.$[r].unreadCount": 1 };
+  if (countsAsUnread && doc.mentions.length) {
+    update.$inc["members.$[m].mentionCount"] = 1;
+    arrayFilters.push({ "m.user": { $in: doc.mentions } });
+  }
   await Conversation.updateOne({ _id: conv._id }, update, { arrayFilters });
 
   const payload = { message: serializeMessage(message) };
@@ -159,8 +185,36 @@ export async function createMessage({
   if (notify && recipients.length) {
     notifyRecipients(conv, message, recipients).catch((err) => console.warn("[push] notify failed:", err.message));
   }
+  // First message in a 1:1 chat makes the two people "contacts" (stories).
+  if (conv.type === "direct" && !conv.lastMessageAt) invalidateContacts(memberIds);
+  if (env.LINK_PREVIEWS && type === "user" && !attachments.length && !poll && !location && !contactCard) {
+    attachLinkPreview(conv, message).catch(() => {});
+  }
 
   return { message, duplicate: false };
+}
+
+function uniqueMentionIds(conv, mentions, senderId) {
+  const memberSet = new Set(conv.members.map((m) => idStr(m.user)));
+  return [...new Set((mentions || []).map(idStr))]
+    .filter((id) => memberSet.has(id) && id !== idStr(senderId))
+    .slice(0, 50)
+    .map(toObjectId);
+}
+
+/** Unfurls the first link in the background and updates the message. */
+export async function attachLinkPreview(conv, message) {
+  if (!env.LINK_PREVIEWS) return;
+  const url = firstUrl(message.text);
+  if (!url) return;
+  const preview = await unfurl(url);
+  if (!preview) return;
+  const updated = await Message.findOneAndUpdate(
+    { _id: message._id, deletedAt: null },
+    { $set: { linkPreview: preview } },
+    { new: true }
+  ).lean();
+  if (updated) broadcastMessageUpdate(conv, updated);
 }
 
 /** Web Push for recipients without a visible tab, honoring mute/focus. */
@@ -180,8 +234,12 @@ async function notifyRecipients(conv, message, recipientIds) {
       const member = conv.members.find((m) => sameId(m.user, user._id));
       const muted = isActiveUntil(member?.mutedUntil);
       const focusing = isActiveUntil(user.focus?.until);
-      const breakThrough = message.urgent && user.focus?.allowUrgent !== false;
-      if ((muted || focusing) && !breakThrough) return;
+      const urgentOk = message.urgent && user.focus?.allowUrgent !== false;
+      // @mentions notify even in a muted group (like WhatsApp), but focus
+      // mode still holds them unless the message is urgent.
+      const mentioned = (message.mentions || []).some((id) => sameId(id, user._id));
+      if (focusing && !urgentOk) return;
+      if (muted && !urgentOk && !mentioned) return;
 
       const showPreview = user.settings?.notificationPreviews !== false;
       const isGroup = conv.type === "group";

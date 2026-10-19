@@ -2,7 +2,9 @@
 
 A fast, mobile-first messenger built with MongoDB, Express, React and Socket.IO.
 
-**Core:** direct & group chats (up to 256), delivered/read receipts, typing indicators, presence & last seen, replies, reactions, edit, delete for me/everyone, forward, search, photos/videos/files, voice notes, voice & video calls (multi-device ringing, screen share), disappearing messages, mute/pin/archive, blocking, Web Push notifications, installable PWA, offline outbox, light/dark/system themes.
+**Core:** direct & group chats (up to 256), delivered/read receipts, typing indicators, presence & last seen, replies, reactions, edit, delete for me/everyone, forward, search, photos/videos/files, voice notes, voice & video calls (multi-device ringing, screen share), disappearing messages, mute/pin/archive, blocking, Web Push notifications, installable PWA, offline outbox, light/dark/system themes with accent colors and solid/soft bubbles.
+
+**Modern messenger features:** status updates (24h stories with views, reactions and replies) · GIFs & stickers · polls · location sharing (OpenStreetMap preview) · contact cards · @mentions (notify even in muted groups) · pinned messages · starred messages · Saved Messages (chat with yourself) · view-once photos/videos · link previews · group invite links with QR codes · profile QR code · Calls tab with history · global message search · Favorites filter · chat export (.txt) · app lock with PIN.
 
 **Extras most messengers don't have:** contact's local time in the header · "send at their morning" (time-zone-aware scheduling) · scheduled messages · "Remind me" on any message · Needs-reply filter · Focus mode with urgent override · optional AI: catch-up summaries, reply suggestions, rewrite, translate, voice-note transcription.
 
@@ -48,6 +50,9 @@ Everything else is optional and switches features on:
 | Password reset emails | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM` | Gmail: turn on 2-step verification → [App passwords](https://myaccount.google.com/apppasswords) → use it as `EMAIL_PASS`. Or [Brevo](https://www.brevo.com) SMTP (300/day). In development, codes are printed to the server console. |
 | Push notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | `npm --prefix backend run vapid` and paste both keys. (Auto-generated locally if empty; set them in production so subscriptions survive redeploys.) iPhone users must add the site to the Home Screen first. |
 | AI features | `GROQ_API_KEY` (recommended) or `GEMINI_API_KEY` | [Groq](https://console.groq.com/keys) — free, also enables voice-note transcription. [Google AI Studio](https://aistudio.google.com/apikey) — free. Optional overrides: `AI_PROVIDER`, `AI_MODEL`, `AI_BASE_URL`; `ANTHROPIC_API_KEY` for Claude (paid). `AI_DAILY_LIMIT_PER_USER` protects your free quota. |
+| GIFs & stickers | `KLIPY_API_KEY` | [KLIPY Partner Panel](https://partner.klipy.com) → create an app → copy the API key (free; Tenor's API closed in June 2026). Without it the GIF/Stickers tabs are hidden. Free keys allow ~100 requests/hour until you request production access; results are cached on the server. |
+| Link previews | `LINK_PREVIEWS` | On by default (`false` to disable). Pages are fetched by the server with private-network protection. |
+| Map tiles (location messages) | `VITE_MAP_TILES` (frontend, optional) | Defaults to OpenStreetMap tiles (fine for small apps). For heavy traffic use a free tile key, e.g. [MapTiler](https://www.maptiler.com) `https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=YOUR_KEY`. |
 | Reliable calls (TURN relay) | `METERED_DOMAIN`, `METERED_API_KEY` | [Metered](https://www.metered.ca/tools/openrelay/) free plan (20 GB/month): sign up → your app domain (e.g. `yourapp.metered.live`) + API key. Alternatives: Cloudflare TURN (`CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN`) or your own coturn (`TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL`). Without TURN, calls fail on many mobile networks. |
 
 ## Deploy (recommended: one free service on Render)

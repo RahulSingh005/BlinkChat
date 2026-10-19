@@ -1,5 +1,5 @@
 import toast from "react-hot-toast";
-import { Archive, ArchiveRestore, Ban, Bell, BellOff, CheckCheck, LogOut, Pin, PinOff, ShieldCheck, Trash2, Eraser } from "lucide-react";
+import { Archive, ArchiveRestore, Ban, Bell, BellOff, CheckCheck, Eraser, Heart, HeartOff, LogOut, Pin, PinOff, ShieldCheck, Trash2 } from "lucide-react";
 import { errorMessage } from "../../lib/api";
 import { firstName } from "../../lib/format";
 import { conversationTitle, isMuted, peerOf, useChatStore } from "../../store/useChatStore";
@@ -85,6 +85,12 @@ export function listMenuItems(conv, { onDeleted } = {}) {
       onSelect: () => run(() => chat.updateMySettings(conv._id, { pinned: !pinned })),
     },
     conv.me.unreadCount > 0 && { key: "read", label: "Mark as read", icon: CheckCheck, onSelect: () => chat.markRead(conv._id) },
+    {
+      key: "fav",
+      label: conv.me.favorite ? "Remove from favorites" : "Add to favorites",
+      icon: conv.me.favorite ? HeartOff : Heart,
+      onSelect: () => run(() => chat.toggleFavorite(conv), conv.me.favorite ? "Removed from favorites" : "Added to favorites"),
+    },
     {
       key: "archive",
       label: conv.me.archived ? "Unarchive" : "Archive",

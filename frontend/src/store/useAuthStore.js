@@ -7,8 +7,11 @@ import { storage } from "../lib/storage";
 import { myTimezone } from "../lib/time";
 import { bindRealtime, resetSessionStores } from "./realtime";
 import { useConfigStore } from "./useConfigStore";
+import { useLockStore } from "./useLockStore";
 
 export const PUSH_OWNER_KEY = "blinkchat.pushOwner";
+
+let bootRetries = 0;
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -19,14 +22,31 @@ export const useAuthStore = create((set, get) => ({
 
   checkAuth: async () => {
     try {
-      const res = await api.get("/auth/check", { skipAuthHandler: true });
-      get()._onAuthenticated(res.data.user);
-    } catch {
-      set({ authUser: null, status: "guest" });
+      // 200 for guests too ({ user: null }), so signed-out visits don't log a 401.
+      const res = await api.get("/auth/session", { skipAuthHandler: true });
+      if (res.data.user) get()._onAuthenticated(res.data.user, { restored: true });
+      else if (get().status === "authenticated") get()._clearSession();
+      else set({ authUser: null, status: "guest" });
+    } catch (err) {
+      // Network blip during boot: retry a few times before showing sign-in.
+      if (!err.response && get().status === "checking" && bootRetries < 3) {
+        bootRetries += 1;
+        setTimeout(() => get().checkAuth(), 1500 * bootRetries);
+        return;
+      }
+      if (get().status !== "authenticated") set({ authUser: null, status: "guest" });
     }
   },
 
-  _onAuthenticated: (user) => {
+  _onAuthenticated: (user, { restored = false } = {}) => {
+    // A restored session asks for the app-lock PIN; a fresh sign-in doesn't.
+    const lock = useLockStore.getState();
+    if (!restored) {
+      lock.load(user._id);
+      lock.unlock();
+    } else if (get().authUser?._id !== user._id) {
+      lock.load(user._id);
+    }
     set({ authUser: user, status: "authenticated" });
     get().connectSocket();
 
@@ -76,6 +96,7 @@ export const useAuthStore = create((set, get) => ({
     tokenStore.clear();
     get().disconnectSocket();
     resetSessionStores();
+    useLockStore.getState().reset();
     set({ authUser: null, status: "guest", presence: {} });
   },
 

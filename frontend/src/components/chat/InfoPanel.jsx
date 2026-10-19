@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
+  ArrowLeft,
   AudioLines,
   Ban,
   Bell,
@@ -9,17 +10,21 @@ import {
   Camera,
   Clock3,
   Crown,
+  Download,
   Eraser,
   EllipsisVertical,
   FileText,
+  Heart,
   Image as ImageIcon,
   Languages,
+  Link2,
   LogOut,
   MessageCircle,
   Pencil,
   Phone,
   Search,
   ShieldCheck,
+  Star,
   Timer,
   Trash2,
   UserMinus,
@@ -55,7 +60,7 @@ const TIMERS = [0, 86400, 604800, 7776000];
 
 function Section({ title, children, action }) {
   return (
-    <section className="border-t border-base-300/60 px-5 py-4">
+    <section className="border-t border-base-300/60 px-4 py-4">
       {(title || action) && (
         <div className="mb-2 flex items-center justify-between">
           {title && <h4 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{title}</h4>}
@@ -235,6 +240,7 @@ export default function InfoPanel({ conversationId, docked = false }) {
   if (!conv) return null;
   const close = () => useUIStore.getState().close("infoOpen");
   const group = conv.type === "group";
+  const self = conv.type === "self";
   const title = conversationTitle(conv, me._id);
   const admin = group && conv.me.role === "admin";
   const muted = isMuted(conv);
@@ -292,8 +298,19 @@ export default function InfoPanel({ conversationId, docked = false }) {
     useCallStore.getState().startCall(conv, peer, type);
   };
 
+  const exportChat = async () => {
+    const id = toast.loading("Preparing export…");
+    try {
+      await useChatStore.getState().exportChat(conv);
+      toast.success("Chat exported", { id });
+    } catch (err) {
+      toast.error(errorMessage(err, "Couldn't export this chat"), { id });
+    }
+  };
+
   let subtitle = "";
-  if (group) subtitle = `Group · ${plural(conv.members.length, "member")}`;
+  if (self) subtitle = "Only you can see this chat";
+  else if (group) subtitle = `Group · ${plural(conv.members.length, "member")}`;
   else if (peer?.deleted) subtitle = "Deleted account";
   else if (presence?.online) subtitle = "online";
   else if (peer?.presenceVisible) subtitle = formatLastSeen(presence?.lastSeen || peer?.lastSeen);
@@ -302,17 +319,19 @@ export default function InfoPanel({ conversationId, docked = false }) {
 
   return (
     <div className="flex h-full w-full flex-col bg-base-100">
-      <header className="safe-top flex h-16 shrink-0 items-center gap-2 border-b border-base-300/60 px-3">
-        <button type="button" className="icon-btn" onClick={close} aria-label="Close details">
-          <X className="size-5" />
-        </button>
-        <h2 className="font-semibold">{group ? "Group info" : "Contact info"}</h2>
+      <header className="safe-top shrink-0 border-b border-base-300/70">
+        <div className="flex h-header items-center gap-2 px-2">
+          <button type="button" className="icon-btn" onClick={close} aria-label="Close details" title="Close">
+            {docked ? <X className="size-5" /> : <ArrowLeft className="size-[22px]" />}
+          </button>
+          <h2 className="text-[1.0625rem] font-semibold">{group ? "Group info" : self ? "Saved Messages" : "Contact info"}</h2>
+        </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <section className="flex flex-col items-center px-6 pb-5 pt-6 text-center">
           <div className="relative">
-            <Avatar src={group ? conv.avatar : peer?.profilePic} name={title} seed={group ? conv._id : peer?._id} group={group} size={112} />
+            <Avatar src={group ? conv.avatar : peer?.profilePic} name={title} seed={group ? conv._id : peer?._id} group={group} self={self} size={112} />
             {admin && (
               <>
                 <button
@@ -385,13 +404,24 @@ export default function InfoPanel({ conversationId, docked = false }) {
             >
               <Search className="size-5 text-primary" /> Search
             </button>
-            <button
-              type="button"
-              className="flex w-[72px] flex-col items-center gap-1 rounded-2xl border border-base-300/70 py-2.5 text-xs font-medium transition hover:bg-base-200/60"
-              onClick={(e) => setMuteMenu({ anchor: e.currentTarget })}
-            >
-              {muted ? <BellOff className="size-5 text-primary" /> : <Bell className="size-5 text-primary" />} {muted ? "Muted" : "Mute"}
-            </button>
+            {!self && (
+              <button
+                type="button"
+                className="flex w-[72px] flex-col items-center gap-1 rounded-2xl border border-base-300/70 py-2.5 text-xs font-medium transition hover:bg-base-200/60"
+                onClick={(e) => setMuteMenu({ anchor: e.currentTarget })}
+              >
+                {muted ? <BellOff className="size-5 text-primary" /> : <Bell className="size-5 text-primary" />} {muted ? "Muted" : "Mute"}
+              </button>
+            )}
+            {group && admin && (
+              <button
+                type="button"
+                className="flex w-[72px] flex-col items-center gap-1 rounded-2xl border border-base-300/70 py-2.5 text-xs font-medium transition hover:bg-base-200/60"
+                onClick={() => useUIStore.getState().open("invite", conv._id)}
+              >
+                <Link2 className="size-5 text-primary" /> Invite
+              </button>
+            )}
           </div>
         </section>
 
@@ -417,11 +447,32 @@ export default function InfoPanel({ conversationId, docked = false }) {
         <SharedMedia conv={conv} />
 
         <Section title="Chat settings">
-          <Row icon={muted ? BellOff : Bell} label="Notifications" value={muted ? (new Date(conv.me.mutedUntil).getFullYear() > 9000 ? "Muted" : `Muted ${formatUntil(conv.me.mutedUntil)}`) : "On"} onClick={(e) => setMuteMenu({ anchor: e.currentTarget })} />
+          {!self && (
+            <Row icon={muted ? BellOff : Bell} label="Notifications" value={muted ? (new Date(conv.me.mutedUntil).getFullYear() > 9000 ? "Muted" : `Muted ${formatUntil(conv.me.mutedUntil)}`) : "On"} onClick={(e) => setMuteMenu({ anchor: e.currentTarget })} />
+          )}
+          <Row icon={Heart} label="Favorite" value={conv.me.favorite ? "Shown under Favorites" : "Off"}>
+            <input
+              type="checkbox"
+              className="toggle toggle-primary toggle-sm"
+              checked={Boolean(conv.me.favorite)}
+              onChange={() => useChatStore.getState().toggleFavorite(conv).catch((err) => toast.error(errorMessage(err)))}
+              aria-label="Favorite"
+            />
+          </Row>
+          <Row
+            icon={Star}
+            label="Starred messages"
+            onClick={() => {
+              close();
+              navigate(`/starred?chat=${conv._id}`, { viewTransition: true });
+            }}
+          />
+          {group && admin && <Row icon={Link2} label="Invite via link" value={conv.inviteCode ? "Link is on" : "Off"} onClick={() => useUIStore.getState().open("invite", conv._id)} />}
           {(!group || admin) && (
             <Row icon={Timer} label="Disappearing messages" value={conv.disappearingSeconds ? disappearingLabel(conv.disappearingSeconds) : "Off"} onClick={(e) => setTimerMenu({ anchor: e.currentTarget })} />
           )}
-          {ai && (
+          <Row icon={Download} label="Export chat" value="Save the history as a text file" onClick={exportChat} />
+          {ai && !self && (
             <Row icon={Languages} label="Translate automatically" value={autoTranslate ? `Into ${me.settings?.language?.toUpperCase() || "EN"}` : "Off"}>
               <input type="checkbox" className="toggle toggle-primary toggle-sm" checked={autoTranslate} onChange={(e) => useSettingsStore.getState().setAutoTranslate(conv._id, e.target.checked)} aria-label="Translate automatically" />
             </Row>

@@ -6,6 +6,7 @@ import Message from "../models/message.model.js";
 import PushSubscription from "../models/pushSubscription.model.js";
 import Reminder from "../models/reminder.model.js";
 import ScheduledMessage from "../models/scheduledMessage.model.js";
+import Story from "../models/story.model.js";
 import User from "../models/user.model.js";
 import { badRequest, conflict, tooMany, unauthorized, unavailable } from "../lib/errors.js";
 import { passwordResetAvailable, sendOtpEmail } from "../lib/mailer.js";
@@ -141,6 +142,13 @@ export const googleAuth = async (req, res) => {
   sessionResponse(req, res, user);
 };
 
+/** Boot check that answers 200 for guests too (no 401 noise in the console). */
+export const getSession = (req, res) => {
+  res.set("Cache-Control", "no-store");
+  if (!req.user) return res.json({ user: null });
+  sessionResponse(req, res, req.user);
+};
+
 export const checkAuth = (req, res) => {
   // Re-issuing on every check gives a sliding session: active users never
   // get logged out unexpectedly.
@@ -234,6 +242,14 @@ export const deleteAccount = async (req, res) => {
     PushSubscription.deleteMany({ user: user._id }),
     Reminder.deleteMany({ user: user._id }),
     ScheduledMessage.deleteMany({ sender: user._id }),
+    Story.find({ user: user._id })
+      .select("media")
+      .lean()
+      .then((stories) => {
+        stories.forEach((st) => st.media && deleteStoredFile(st.media));
+        return Story.deleteMany({ user: user._id });
+      }),
+    Story.updateMany({ "viewers.user": user._id }, { $pull: { viewers: { user: user._id } } }),
     User.updateMany({ blockedUsers: user._id }, { $pull: { blockedUsers: user._id } }),
   ]);
   await User.deleteOne({ _id: user._id });

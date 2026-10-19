@@ -7,16 +7,21 @@ import { previewText } from "../lib/preview";
 import { sounds } from "../lib/sound";
 import { storage } from "../lib/storage";
 import { PUSH_OWNER_KEY, useAuthStore } from "./useAuthStore";
+import { useCallLogStore } from "./useCallLogStore";
 import { useCallStore } from "./useCallStore";
 import { conversationTitle, useChatStore } from "./useChatStore";
+import { useLockStore } from "./useLockStore";
 import { useReminderStore } from "./useReminderStore";
 import { useSettingsStore } from "./useSettingsStore";
+import { useStoryStore } from "./useStoryStore";
 
 /** Clears every per-account store (logout / account switch). */
 export function resetSessionStores() {
   useCallStore.getState().reset();
   useChatStore.getState().reset();
   useReminderStore.getState().reset();
+  useStoryStore.getState().reset();
+  useCallLogStore.getState().reset();
   clearAllDrafts();
   toast.remove();
 }
@@ -45,8 +50,12 @@ function notifyMessage(message, conversation) {
   if (!me || !conversation) return;
   const focusing = me.focus?.until && new Date(me.focus.until) > new Date();
   const muted = conversation.me?.mutedUntil && new Date(conversation.me.mutedUntil) > new Date();
-  const breakThrough = message.urgent && me.focus?.allowUrgent !== false;
-  if ((focusing || muted) && !breakThrough) return;
+  const urgentOk = message.urgent && me.focus?.allowUrgent !== false;
+  // @mentions get through a muted group (not focus mode), like WhatsApp.
+  const mentioned = message.mentions?.includes(me._id);
+  if (focusing && !urgentOk) return;
+  if (muted && !urgentOk && !mentioned) return;
+  const locked = useLockStore.getState().locked;
 
   const settings = useSettingsStore.getState();
   const sender = conversation.members.find((m) => m.user._id === message.sender)?.user;
@@ -59,6 +68,8 @@ function notifyMessage(message, conversation) {
   if (settings.sounds) sounds.message();
 
   if (document.visibilityState === "visible") {
+    // Never preview messages over the lock screen.
+    if (locked) return;
     toast.custom(
       (t) => (
         <MessageToast
@@ -80,7 +91,7 @@ function notifyMessage(message, conversation) {
   if (!pushOnThisDevice && settings.desktopNotifications) {
     systemNotification({
       title: message.urgent ? `Urgent · ${title}` : title,
-      body: me.settings?.notificationPreviews === false ? "New message" : body,
+      body: me.settings?.notificationPreviews === false || locked ? "New message" : body,
       icon: isGroup ? conversation.avatar : sender?.profilePic,
       tag: `conv-${conversation._id}`,
       url,
@@ -102,6 +113,8 @@ export function bindRealtime(socket) {
     if (connectedBefore) calls.getState().rejoin();
     chat.getState().resync();
     reminders.getState().fetch();
+    useStoryStore.getState().fetch();
+    useCallLogStore.getState().fetch();
     chat.getState().flushOutbox();
     connectedBefore = true;
   });
@@ -135,7 +148,9 @@ export function bindRealtime(socket) {
   socket.on("message:new", ({ message }) => {
     const result = chat.getState().onMessageNew(message);
     if (result?.notify) notifyMessage(message, result.conversation);
+    if (message.type === "call") useCallLogStore.getState().refetchSoon();
   });
+  socket.on("message:starred", (payload) => chat.getState().onStarred(payload));
   socket.on("message:updated", ({ message }) => chat.getState().onMessageUpdated(message));
   socket.on("message:hidden", ({ conversationId, messageId }) => chat.getState()._hide(conversationId, messageId));
   socket.on("conversation:new", ({ conversation }) => chat.getState().upsertConversation(conversation));
@@ -161,6 +176,16 @@ export function bindRealtime(socket) {
   socket.on("user:deleted", ({ userId }) => chat.getState().onUserDeleted(userId));
   socket.on("me:updated", ({ user }) => auth.setState({ authUser: user }));
   socket.on("me:blocks", ({ blockedUsers }) => auth.getState().setUser({ blockedUsers }));
+
+  // Status updates
+  socket.on("story:new", () => useStoryStore.getState().refetchSoon());
+  socket.on("story:deleted", ({ storyId }) => useStoryStore.getState()._dropStory(storyId));
+  socket.on("story:viewed", (payload) => {
+    useStoryStore.getState().onViewed(payload);
+    if (payload.reaction && !useLockStore.getState().locked) {
+      toast(`${firstName(payload.reaction.name)} reacted ${payload.reaction.emoji} to your status`, { id: `story-r-${payload.storyId}` });
+    }
+  });
 
   // Scheduled messages & reminders
   socket.on("scheduled:changed", ({ conversationId }) => chat.getState().fetchScheduled(conversationId));

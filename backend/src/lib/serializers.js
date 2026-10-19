@@ -88,28 +88,39 @@ export function selfUser(user) {
   };
 }
 
-export function serializeMessage(msg) {
+/**
+ * Message shape for clients. Pass `viewerId` to include per-viewer fields
+ * (starred, view-once opened); broadcasts omit them and clients keep their
+ * own copy. View-once media URLs are never included — they're fetched once
+ * through /messages/:id/view-once.
+ */
+export function serializeMessage(msg, viewerId = null) {
   if (!msg) return null;
   const m = typeof msg.toObject === "function" ? msg.toObject() : msg;
   const deleted = Boolean(m.deletedAt);
-  return {
+  const viewOnce = Boolean(m.viewOnce);
+  const out = {
     _id: idStr(m._id),
     conversation: idStr(m.conversation),
     sender: idStr(m.sender),
     type: m.type || "user",
     text: deleted ? "" : m.text || "",
-    attachments: deleted ? [] : (m.attachments || []).map((a) => ({
-      kind: a.kind,
-      url: a.url,
-      name: a.name || "",
-      mime: a.mime || "",
-      size: a.size || 0,
-      width: a.width ?? null,
-      height: a.height ?? null,
-      duration: a.duration ?? null,
-      voice: Boolean(a.voice),
-      waveform: a.waveform?.length ? a.waveform : undefined,
-    })),
+    attachments: deleted
+      ? []
+      : (m.attachments || []).map((a) => ({
+          kind: a.kind,
+          url: viewOnce ? null : a.url,
+          mp4: viewOnce ? undefined : a.mp4 || undefined,
+          provider: a.provider || undefined,
+          name: a.name || "",
+          mime: a.mime || "",
+          size: a.size || 0,
+          width: a.width ?? null,
+          height: a.height ?? null,
+          duration: a.duration ?? null,
+          voice: Boolean(a.voice),
+          waveform: a.waveform?.length ? a.waveform : undefined,
+        })),
     replyTo:
       deleted || !m.replyTo?.message
         ? null
@@ -123,6 +134,22 @@ export function serializeMessage(msg) {
     urgent: Boolean(m.urgent),
     scheduled: Boolean(m.scheduled),
     reactions: deleted ? [] : (m.reactions || []).map((r) => ({ user: idStr(r.user), emoji: r.emoji })),
+    poll:
+      deleted || !m.poll
+        ? null
+        : {
+            question: m.poll.question,
+            multiple: Boolean(m.poll.multiple),
+            closedAt: m.poll.closedAt || null,
+            options: m.poll.options.map((o) => ({ id: o.id, text: o.text, voters: (o.voters || []).map(idStr) })),
+          },
+    location: deleted || !m.location ? null : { lat: m.location.lat, lng: m.location.lng, accuracy: m.location.accuracy ?? null, label: m.location.label || "" },
+    contactCard: deleted || !m.contactCard ? null : { user: idStr(m.contactCard.user), name: m.contactCard.name || "", avatar: m.contactCard.avatar || "" },
+    linkPreview: deleted || !m.linkPreview?.url ? null : { ...m.linkPreview },
+    mentions: (m.mentions || []).map(idStr),
+    viewOnce,
+    viewedBy: viewOnce ? (m.viewedBy || []).map(idStr) : undefined,
+    storyReply: deleted || !m.storyReply?.story ? null : { ...m.storyReply, story: idStr(m.storyReply.story), owner: idStr(m.storyReply.owner) },
     editedAt: m.editedAt || null,
     deletedAt: m.deletedAt || null,
     clientId: m.clientId || null,
@@ -135,6 +162,11 @@ export function serializeMessage(msg) {
     createdAt: m.createdAt,
     updatedAt: m.updatedAt,
   };
+  if (viewerId) {
+    out.starred = (m.starredBy || []).some((id) => sameId(id, viewerId));
+    if (viewOnce) out.viewOnceOpened = (m.viewedBy || []).some((id) => sameId(id, viewerId));
+  }
+  return out;
 }
 
 const KIND_LABEL = {
@@ -142,6 +174,8 @@ const KIND_LABEL = {
   video: "🎥 Video",
   audio: "🎵 Audio",
   file: "📎 File",
+  gif: "GIF",
+  sticker: "Sticker",
 };
 
 /** Short human preview used for notifications and reminders. */
@@ -153,8 +187,12 @@ export function messagePreview(msg) {
     if (msg.call.status === "completed") return `📞 ${kind === "video" ? "Video" : "Voice"} call`;
     return `📞 Missed ${kind} call`;
   }
+  if (msg.poll) return `📊 Poll: ${truncate(msg.poll.question, 90)}`;
+  if (msg.location) return msg.location.label ? `📍 ${truncate(msg.location.label, 80)}` : "📍 Location";
+  if (msg.contactCard) return `👤 Contact: ${msg.contactCard.name || "Contact"}`;
   const first = msg.attachments?.[0];
   if (first) {
+    if (msg.viewOnce) return first.kind === "video" ? "🎥 View once video" : "📷 View once photo";
     const label =
       first.kind === "audio" && first.voice
         ? "🎤 Voice message"
@@ -171,7 +209,7 @@ export function messagePreview(msg) {
  * users (selected with USER_PUBLIC_FIELDS). Read receipts are only exposed
  * when both sides have them enabled.
  */
-export function serializeConversation(conv, viewer, usersById, lastMessage = undefined) {
+export function serializeConversation(conv, viewer, usersById, lastMessage = undefined, pinnedMessages = undefined) {
   const c = typeof conv.toObject === "function" ? conv.toObject() : conv;
   const viewerId = viewer._id;
   const viewerReceipts = viewer.settings?.readReceipts !== false;
@@ -205,6 +243,8 @@ export function serializeConversation(conv, viewer, usersById, lastMessage = und
       role: meMember?.role || "member",
       joinedAt: meMember?.joinedAt || null,
       unreadCount: meMember?.unreadCount || 0,
+      mentionCount: meMember?.mentionCount || 0,
+      favorite: Boolean(meMember?.favorite),
       lastReadAt: meMember?.lastReadAt || null,
       mutedUntil: isActiveUntil(meMember?.mutedUntil) ? meMember.mutedUntil : null,
       pinnedAt: meMember?.pinnedAt || null,
@@ -219,6 +259,17 @@ export function serializeConversation(conv, viewer, usersById, lastMessage = und
     out.blocked = peer ? hasBlocked(viewer, peer.user) : false;
   }
 
-  if (lastMessage !== undefined) out.lastMessage = lastMessage ? serializeMessage(lastMessage) : null;
+  if (c.type === "group" && meMember?.role === "admin") out.inviteCode = c.inviteCode || null;
+  if (pinnedMessages !== undefined) {
+    const byId = new Map(pinnedMessages.map((p) => [idStr(p._id), p]));
+    out.pinned = (c.pinned || [])
+      .map((p) => {
+        const msg = byId.get(idStr(p.message));
+        if (!msg || msg.deletedAt || msg.hiddenFor?.some((id) => sameId(id, viewerId))) return null;
+        return { message: serializeMessage(msg, viewerId), by: idStr(p.by), at: p.at };
+      })
+      .filter(Boolean);
+  }
+  if (lastMessage !== undefined) out.lastMessage = lastMessage ? serializeMessage(lastMessage, viewerId) : null;
   return out;
 }

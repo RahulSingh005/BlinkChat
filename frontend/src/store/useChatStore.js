@@ -45,10 +45,13 @@ function mergeMessages(items, incoming) {
     if (idx !== -1) {
       const prev = out[idx];
       // Carry local previews over so freshly sent images don't re-download.
-      out[idx] =
+      let next =
         prev.attachments?.some((a) => a.previewUrl) && msg.attachments?.length
           ? { ...msg, attachments: msg.attachments.map((a, i) => ({ ...a, previewUrl: a.previewUrl || prev.attachments[i]?.previewUrl })) }
           : msg;
+      if (next.starred === undefined && prev.starred !== undefined) next = { ...next, starred: prev.starred };
+      if (prev.viewOnceMedia && !next.viewOnceMedia) next = { ...next, viewOnceMedia: prev.viewOnceMedia };
+      out[idx] = next;
       needsSort = true;
     } else {
       if (out.length && byTime(out[out.length - 1], msg) > 0) needsSort = true;
@@ -65,7 +68,14 @@ const countsAsUnread = (msg) =>
   msg.type === "user" || (msg.type === "call" && ["missed", "unavailable"].includes(msg.call?.status));
 
 const replySnapshot = (m) =>
-  m ? { message: m._id, sender: m.sender, text: (m.text || "").slice(0, 200), kind: m.attachments?.[0]?.kind || (m.type === "call" ? "call" : null) } : null;
+  m
+    ? {
+        message: m._id,
+        sender: m.sender,
+        text: (m.text || (m.poll ? m.poll.question : "") || "").slice(0, 200),
+        kind: m.attachments?.[0]?.kind || (m.type === "call" ? "call" : m.poll ? "poll" : m.location ? "location" : m.contactCard ? "contact" : null),
+      }
+    : null;
 
 /** Read/delivery state of one of *my* messages in a conversation. */
 export function receiptFor(msg, conv) {
@@ -93,7 +103,19 @@ export const peerOf = (conv, me = meId()) =>
   conv?.type === "direct" ? conv.members.find((m) => m.user._id !== me)?.user || null : null;
 
 export const conversationTitle = (conv, me = meId()) =>
-  conv?.type === "group" ? conv.name || "Group" : peerOf(conv, me)?.fullName || "Chat";
+  conv?.type === "group" ? conv.name || "Group" : conv?.type === "self" ? "Saved Messages" : peerOf(conv, me)?.fullName || "Chat";
+
+/** Download helper for exports (works with cookie and bearer auth). */
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
 
 const isMuted = (conv) => Boolean(conv?.me?.mutedUntil && new Date(conv.me.mutedUntil) > new Date());
 
@@ -169,6 +191,42 @@ export const useChatStore = create((set, get) => ({
     const res = await api.post("/conversations/direct", { userId });
     get().upsertConversation(res.data.conversation);
     return res.data.conversation;
+  },
+
+  /** "Saved Messages" (notes to self). */
+  openSelf: async () => {
+    const res = await api.get("/conversations/self");
+    get().upsertConversation(res.data.conversation);
+    return res.data.conversation;
+  },
+
+  toggleFavorite: (conv) => get().updateMySettings(conv._id, { favorite: !conv.me.favorite }),
+
+  exportChat: async (conv) => {
+    const res = await api.get(`/conversations/${conv._id}/export`, { responseType: "blob", timeout: 120000 });
+    const title = conversationTitle(conv).replace(/[^\w\- ]+/g, "").trim() || "chat";
+    saveBlob(res.data, `BlinkChat - ${title}.txt`);
+  },
+
+  pinMessage: async (conversationId, messageId) => {
+    const res = await api.post(`/conversations/${conversationId}/pins`, { messageId });
+    get().upsertConversation(res.data.conversation);
+  },
+
+  unpinMessage: async (conversationId, messageId) => {
+    const res = await api.delete(`/conversations/${conversationId}/pins/${messageId}`);
+    get().upsertConversation(res.data.conversation);
+  },
+
+  createInvite: async (conversationId) => {
+    const res = await api.post(`/conversations/${conversationId}/invite`);
+    get().patchConversation(conversationId, (c) => ({ ...c, inviteCode: res.data.inviteCode }));
+    return res.data.inviteCode;
+  },
+
+  revokeInvite: async (conversationId) => {
+    await api.delete(`/conversations/${conversationId}/invite`);
+    get().patchConversation(conversationId, (c) => ({ ...c, inviteCode: null }));
   },
 
   createGroup: async ({ name, memberIds, avatar = "", description = "" }) => {
@@ -357,9 +415,9 @@ export const useChatStore = create((set, get) => ({
     if (!conv) return;
     const last = conv.lastMessage;
     const stale = last && last.sender !== meId() && new Date(last.createdAt) > new Date(conv.me.lastReadAt || 0);
-    if (!conv.me.unreadCount && !stale) return;
+    if (!conv.me.unreadCount && !conv.me.mentionCount && !stale) return;
     const at = new Date().toISOString();
-    get().patchConversation(conversationId, (c) => ({ ...c, me: { ...c.me, unreadCount: 0, lastReadAt: at } }));
+    get().patchConversation(conversationId, (c) => ({ ...c, me: { ...c.me, unreadCount: 0, mentionCount: 0, lastReadAt: at } }));
     api.post(`/conversations/${conversationId}/read`).catch(() => {});
   },
 
@@ -376,7 +434,10 @@ export const useChatStore = create((set, get) => ({
    * { file, kind, previewUrl, width, height, duration, voice, waveform }.
    * The bubble shows immediately with local previews and upload progress.
    */
-  sendMessage: async (conversationId, { text = "", files = [], replyTo = null, urgent = false }) => {
+  sendMessage: async (
+    conversationId,
+    { text = "", files = [], attachments = [], replyTo = null, urgent = false, poll = null, location = null, contact = null, mentions = [], viewOnce = false }
+  ) => {
     const cid = clientId();
     const temp = {
       _id: cid,
@@ -385,7 +446,14 @@ export const useChatStore = create((set, get) => ({
       sender: meId(),
       type: "user",
       text,
-      attachments: files.map((f) => ({
+      poll: poll ? { question: poll.question, multiple: Boolean(poll.multiple), closedAt: null, options: poll.options.map((t, i) => ({ id: String(i + 1), text: t, voters: [] })) } : null,
+      location: location || null,
+      contactCard: contact ? { user: contact._id, name: contact.fullName, avatar: contact.profilePic || "" } : null,
+      mentions,
+      viewOnce: Boolean(viewOnce),
+      attachments: [
+        ...attachments.map((a) => ({ ...a, sig: undefined })),
+        ...files.map((f) => ({
         kind: f.kind,
         url: f.previewUrl,
         previewUrl: f.previewUrl,
@@ -400,6 +468,7 @@ export const useChatStore = create((set, get) => ({
         local: true,
         progress: 0,
       })),
+      ],
       replyTo: replySnapshot(replyTo),
       reactions: [],
       forwarded: false,
@@ -413,7 +482,19 @@ export const useChatStore = create((set, get) => ({
       temp,
       files,
       uploaded: [],
-      payload: { text, replyTo: replyTo?._id || null, urgent, clientId: cid, attachments: [] },
+      payload: {
+        text,
+        replyTo: replyTo?._id || null,
+        urgent,
+        clientId: cid,
+        // Ready-made attachments (GIFs/stickers); uploads are appended on send.
+        attachments,
+        ...(poll ? { poll: { question: poll.question, options: poll.options, multiple: Boolean(poll.multiple) } } : {}),
+        ...(location ? { location } : {}),
+        ...(contact ? { contactUserId: contact._id } : {}),
+        ...(mentions.length ? { mentions } : {}),
+        ...(viewOnce ? { viewOnce: true } : {}),
+      },
     };
     pendingEntries.set(cid, entry);
 
@@ -455,7 +536,7 @@ export const useChatStore = create((set, get) => ({
         });
         entry.uploaded.push(attachment);
       }
-      const res = await api.post(`/conversations/${conversationId}/messages`, { ...payload, attachments: entry.uploaded });
+      const res = await api.post(`/conversations/${conversationId}/messages`, { ...payload, attachments: [...(payload.attachments || []), ...entry.uploaded] });
       get()._dropFromOutbox(temp.clientId);
       pendingEntries.delete(temp.clientId);
       // Keep local previews so images don't flash while the CDN copy loads.
@@ -463,6 +544,8 @@ export const useChatStore = create((set, get) => ({
         ...res.data.message,
         fresh: true,
         attachments: res.data.message.attachments.map((a, i) => ({ ...a, previewUrl: temp.attachments[i]?.previewUrl })),
+        // The sender keeps seeing their own view-once photo locally.
+        viewOnceMedia: temp.viewOnce ? temp.attachments.map((a) => ({ ...a })) : undefined,
       };
       get()._receive(message, { fromSelf: true });
     } catch (err) {
@@ -628,13 +711,64 @@ export const useChatStore = create((set, get) => ({
       return { notify: false, conversation: s.conversations[conversationId] };
     }
     if (countsAsUnread(message)) {
-      get().patchConversation(conversationId, (c) => ({ ...c, me: { ...c.me, unreadCount: (c.me.unreadCount || 0) + 1 } }));
+      const mentioned = message.mentions?.includes(me);
+      get().patchConversation(conversationId, (c) => ({
+        ...c,
+        me: { ...c.me, unreadCount: (c.me.unreadCount || 0) + 1, mentionCount: (c.me.mentionCount || 0) + (mentioned ? 1 : 0) },
+      }));
     }
     const conv = get().conversations[conversationId];
     return { notify: message.type !== "system" && countsAsUnread(message), conversation: conv, muted: isMuted(conv) };
   },
 
   onMessageUpdated: (message) => get()._receive(message),
+
+  _patchMessage: (conversationId, messageId, fn) =>
+    get()._setThread(conversationId, (t) => ({ ...t, items: t.items.map((m) => (m._id === messageId ? fn(m) : m)) })),
+
+  onStarred: ({ conversationId, messageId, starred }) => get()._patchMessage(conversationId, messageId, (m) => ({ ...m, starred })),
+
+  star: async (message, starred) => {
+    get().onStarred({ conversationId: message.conversation, messageId: message._id, starred });
+    try {
+      await api.put(`/messages/${message._id}/star`, { starred });
+      toast.success(starred ? "Starred" : "Removed from starred", { id: `star-${message._id}` });
+    } catch (err) {
+      get().onStarred({ conversationId: message.conversation, messageId: message._id, starred: !starred });
+      toast.error(errorMessage(err));
+    }
+  },
+
+  vote: async (message, optionIds) => {
+    const me = meId();
+    const ids = message.poll.multiple ? optionIds : optionIds.slice(0, 1);
+    get()._patchMessage(message.conversation, message._id, (m) => ({
+      ...m,
+      poll: {
+        ...m.poll,
+        options: m.poll.options.map((o) => ({ ...o, voters: [...o.voters.filter((v) => v !== me), ...(ids.includes(o.id) ? [me] : [])] })),
+      },
+    }));
+    try {
+      const res = await api.post(`/messages/${message._id}/poll/vote`, { optionIds: ids });
+      get()._receive(res.data.message);
+    } catch (err) {
+      get()._receive(message);
+      toast.error(errorMessage(err, "Couldn't vote"));
+    }
+  },
+
+  closePoll: async (message) => {
+    const res = await api.post(`/messages/${message._id}/poll/close`);
+    get()._receive(res.data.message);
+  },
+
+  /** Fetches view-once media (works exactly once per message). */
+  openViewOnce: async (message) => {
+    const res = await api.post(`/messages/${message._id}/view-once`);
+    get()._patchMessage(message.conversation, message._id, (m) => ({ ...m, viewOnceOpened: true, viewedBy: [...new Set([...(m.viewedBy || []), meId()])] }));
+    return res.data.attachments;
+  },
 
   _hide: (conversationId, messageId) => {
     get()._setThread(conversationId, (t) => ({ ...t, items: t.items.filter((m) => m._id !== messageId) }));
@@ -654,13 +788,13 @@ export const useChatStore = create((set, get) => ({
     get().patchConversation(conversationId, (c) => ({
       ...c,
       lastMessage: null,
-      me: { ...c.me, clearedAt: at, unreadCount: 0, lastReadAt: at },
+      me: { ...c.me, clearedAt: at, unreadCount: 0, mentionCount: 0, lastReadAt: at },
     }));
   },
 
   onConversationRead: ({ conversationId, userId, at, self }) => {
     if (self || userId === meId()) {
-      get().patchConversation(conversationId, (c) => ({ ...c, me: { ...c.me, unreadCount: 0, lastReadAt: at } }));
+      get().patchConversation(conversationId, (c) => ({ ...c, me: { ...c.me, unreadCount: 0, mentionCount: 0, lastReadAt: at } }));
       return;
     }
     get().patchConversation(conversationId, (c) => ({

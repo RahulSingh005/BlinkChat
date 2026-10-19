@@ -1,9 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Archive, ArrowLeft, CheckCheck, EllipsisVertical, MessageSquarePlus, Search, SquarePen, Users, X } from "lucide-react";
+import {
+  Archive,
+  Bookmark,
+  CheckCheck,
+  EllipsisVertical,
+  Lock,
+  MessageSquarePlus,
+  Search,
+  Settings,
+  SquarePen,
+  Star,
+  Users,
+  X,
+} from "lucide-react";
 import ConversationItem from "./ConversationItem";
 import { listMenuItems } from "./conversationActions";
+import PanelHeader from "../layout/PanelHeader";
 import Avatar from "../ui/Avatar";
 import Menu from "../ui/Menu";
 import { ConversationSkeleton } from "../ui/Skeletons";
@@ -11,16 +25,20 @@ import { useIsWide } from "../../hooks/useMediaQuery";
 import { useNow } from "../../hooks/useNow";
 import { api, errorMessage } from "../../lib/api";
 import { allDrafts, subscribeDrafts } from "../../lib/drafts";
+import { firstName, formatListTime } from "../../lib/format";
+import { previewText } from "../../lib/preview";
 import { setNavDirection } from "../../lib/transitions";
 import { useAuthStore } from "../../store/useAuthStore";
 import { conversationTitle, needsReply, peerOf, useChatStore } from "../../store/useChatStore";
+import { useLockStore } from "../../store/useLockStore";
 import { useUIStore } from "../../store/useUIStore";
 
 const FILTERS = [
   { id: "all", label: "All" },
   { id: "unread", label: "Unread" },
-  { id: "reply", label: "Needs reply" },
+  { id: "favorites", label: "Favorites" },
   { id: "groups", label: "Groups" },
+  { id: "reply", label: "Needs reply" },
 ];
 
 const sortKey = (c) => new Date(c.lastMessage?.createdAt || c.lastMessageAt || c.createdAt).getTime();
@@ -28,6 +46,22 @@ const sortKey = (c) => new Date(c.lastMessage?.createdAt || c.lastMessageAt || c
 function useDrafts() {
   return useSyncExternalStore(subscribeDrafts, allDrafts, allDrafts);
 }
+
+function Highlight({ text, query }) {
+  const i = query ? text.toLowerCase().indexOf(query.toLowerCase()) : -1;
+  if (i === -1) return text;
+  const start = Math.max(0, i - 24);
+  return (
+    <>
+      {start > 0 && "…"}
+      {text.slice(start, i)}
+      <mark className="rounded bg-warning/35 px-0.5 text-inherit">{text.slice(i, i + query.length)}</mark>
+      {text.slice(i + query.length)}
+    </>
+  );
+}
+
+const SectionLabel = ({ children }) => <div className="px-2 pb-1 pt-4 text-[0.8125rem] font-semibold text-primary">{children}</div>;
 
 export default function ConversationList() {
   const navigate = useNavigate();
@@ -39,6 +73,7 @@ export default function ConversationList() {
   const loaded = useChatStore((s) => s.loaded);
   const loadError = useChatStore((s) => s.loadError);
   const typing = useChatStore((s) => s.typing);
+  const lockable = useLockStore((s) => Boolean(s.config));
   const drafts = useDrafts();
   useNow(60000); // refresh "Waiting 2h" and times
 
@@ -46,6 +81,7 @@ export default function ConversationList() {
   const [archived, setArchived] = useState(false);
   const [query, setQuery] = useState("");
   const [people, setPeople] = useState([]);
+  const [found, setFound] = useState(null); // message search results
   const [menu, setMenu] = useState(null);
   const [headerMenu, setHeaderMenu] = useState(null);
   const searchRef = useRef(null);
@@ -76,6 +112,7 @@ export default function ConversationList() {
     () => ({
       unread: all.filter((c) => !c.me.archived && c.me.unreadCount > 0).length,
       reply: all.filter((c) => needsReply(c, me?._id)).length,
+      favorites: all.filter((c) => c.me.favorite).length,
     }),
     [all, me?._id]
   );
@@ -88,7 +125,8 @@ export default function ConversationList() {
         if (conversationTitle(c, me?._id).toLowerCase().includes(q)) return true;
         return c.type === "group" && c.members.some((m) => m.user.fullName?.toLowerCase().includes(q));
       });
-    } else if (filter === "unread") items = items.filter((c) => c.me.unreadCount > 0);
+    } else if (filter === "unread") items = items.filter((c) => c.me.unreadCount > 0 || c.me.mentionCount > 0);
+    else if (filter === "favorites") items = items.filter((c) => c.me.favorite);
     else if (filter === "reply") items = items.filter((c) => needsReply(c, me?._id));
     else if (filter === "groups") items = items.filter((c) => c.type === "group");
     return items.sort((a, b) => {
@@ -99,34 +137,52 @@ export default function ConversationList() {
     });
   }, [all, q, archived, filter, me?._id]);
 
-  // Searching also finds people you haven't chatted with yet.
+  // Searching also finds people you haven't chatted with yet, and messages.
   useEffect(() => {
     if (q.length < 2) {
       setPeople([]);
+      setFound(null);
       return undefined;
     }
     const controller = new AbortController();
     const t = setTimeout(async () => {
-      try {
-        const res = await api.get("/users/search", { params: { q: query.trim(), limit: 8 }, signal: controller.signal });
+      const term = query.trim();
+      const [users, messages] = await Promise.allSettled([
+        api.get("/users/search", { params: { q: term, limit: 8 }, signal: controller.signal }),
+        api.get("/messages/search", { params: { q: term, limit: 30 }, signal: controller.signal }),
+      ]);
+      if (controller.signal.aborted) return;
+      if (users.status === "fulfilled") {
         const known = new Set(all.filter((c) => c.type === "direct").map((c) => c.peerId));
-        setPeople(res.data.users.filter((u) => !known.has(u._id)));
-      } catch {
-        // ignore aborted / failed searches
+        setPeople(users.value.data.users.filter((u) => !known.has(u._id)));
       }
-    }, 250);
+      setFound(messages.status === "fulfilled" ? messages.value.data.messages : []);
+    }, 280);
     return () => {
       clearTimeout(t);
       controller.abort();
     };
   }, [q, query, all]);
 
+  const go = (id, messageId) => {
+    if (!wide) setNavDirection("forward");
+    navigate(`/chat/${id}${messageId ? `?message=${messageId}` : ""}`, { viewTransition: true });
+  };
+
   const startChat = async (user) => {
     try {
       const conv = await useChatStore.getState().openDirect(user._id);
       setQuery("");
-      if (!wide) setNavDirection("forward");
-      navigate(`/chat/${conv._id}`, { viewTransition: true });
+      go(conv._id);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  const openSaved = async () => {
+    try {
+      const conv = await useChatStore.getState().openSelf();
+      go(conv._id);
     } catch (err) {
       toast.error(errorMessage(err));
     }
@@ -136,86 +192,80 @@ export default function ConversationList() {
 
   const markAllRead = () => {
     const chat = useChatStore.getState();
-    all.filter((c) => c.me.unreadCount > 0).forEach((c) => chat.markRead(c._id));
+    all.filter((c) => c.me.unreadCount > 0 || c.me.mentionCount > 0).forEach((c) => chat.markRead(c._id));
   };
 
+  const nameIn = (conv, id) => (id === me._id ? "You" : firstName(conv?.members.find((m) => m.user._id === id)?.user.fullName || "Someone"));
+
   return (
-    <div className="flex h-full min-h-0 w-full flex-col bg-base-100">
-      <header className="safe-top shrink-0 px-4 pb-2 pt-3">
-        <div className="flex h-10 items-center gap-2">
-          {archived ? (
-            <>
-              <button type="button" className="icon-btn -ml-2" onClick={() => setArchived(false)} aria-label="Back to chats">
-                <ArrowLeft className="size-5" />
+    <div className="relative flex h-full min-h-0 w-full flex-col bg-base-100">
+      <PanelHeader
+        title={archived ? "Archived" : "Chats"}
+        onBack={archived ? () => setArchived(false) : undefined}
+        backLabel="Back to chats"
+        actions={
+          <>
+            {!archived && (
+              <button type="button" className="icon-btn" onClick={() => useUIStore.getState().open("newChatOpen")} aria-label="New chat" title="New chat">
+                <SquarePen className="size-5" />
               </button>
-              <h1 className="text-xl font-bold tracking-tight">Archived</h1>
-            </>
-          ) : (
-            <h1 className="text-[1.6rem] font-bold tracking-tight">Chats</h1>
-          )}
-          <div className="ml-auto flex items-center">
-            <button type="button" className="icon-btn" onClick={() => useUIStore.getState().open("newChatOpen")} aria-label="New chat" title="New chat">
-              <SquarePen className="size-5" />
-            </button>
-            <button
-              type="button"
-              className="icon-btn -mr-2"
-              aria-label="More options"
-              onClick={(e) => setHeaderMenu({ anchor: e.currentTarget })}
-            >
+            )}
+            <button type="button" className="icon-btn" aria-label="More options" title="Menu" onClick={(e) => setHeaderMenu({ anchor: e.currentTarget })}>
               <EllipsisVertical className="size-5" />
             </button>
+          </>
+        }
+      >
+        <div className="px-4 pb-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-base-content/40" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+              placeholder="Search or start a new chat"
+              className="h-10 w-full rounded-full bg-base-200 pl-10 pr-10 text-[0.9rem] outline-none transition placeholder:text-base-content/45 focus:bg-base-200 focus:ring-2 focus:ring-primary/30"
+              aria-label="Search chats, people and messages"
+            />
+            {query && (
+              <button type="button" className="icon-btn icon-btn-sm absolute right-1 top-1/2 -translate-y-1/2" onClick={() => setQuery("")} aria-label="Clear search">
+                <X className="size-4" />
+              </button>
+            )}
           </div>
         </div>
-
-        <div className="relative mt-2">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-base-content/40" />
-          <input
-            ref={searchRef}
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Escape" && setQuery("")}
-            placeholder="Search chats or people"
-            className="h-10 w-full rounded-xl bg-base-200/80 pl-10 pr-9 text-[0.9rem] outline-none transition placeholder:text-base-content/40 focus:bg-base-200 focus:ring-2 focus:ring-primary/25"
-            aria-label="Search chats or people"
-          />
-          {query && (
-            <button type="button" className="icon-btn icon-btn-sm absolute right-1 top-1/2 -translate-y-1/2" onClick={() => setQuery("")} aria-label="Clear search">
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
-
         {!q && !archived && (
-          <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4">
+          <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-2.5">
             {FILTERS.map((f) => (
               <button key={f.id} type="button" onClick={() => setFilter(f.id)} className={`chip ${filter === f.id ? "chip-active" : ""}`} aria-pressed={filter === f.id}>
                 {f.label}
-                {f.id !== "all" && f.id !== "groups" && counts[f.id] > 0 && (
-                  <span className={`rounded-full px-1.5 text-[11px] font-bold ${filter === f.id ? "bg-white/25" : "bg-base-content/10"}`}>{counts[f.id]}</span>
+                {["unread", "reply"].includes(f.id) && counts[f.id] > 0 && (
+                  <span className={`rounded-full px-1.5 text-[11px] font-bold ${filter === f.id ? "bg-primary-content/25" : "bg-base-content/10"}`}>{counts[f.id]}</span>
                 )}
               </button>
             ))}
           </div>
         )}
-      </header>
+      </PanelHeader>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-24 md:pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-24 md:pb-3">
         {!loaded ? (
           <ConversationSkeleton />
         ) : (
           <div className="px-2">
             {!q && !archived && filter === "all" && archivedCount > 0 && (
-              <button type="button" onClick={() => setArchived(true)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-base-content/[0.04]">
-                <span className="flex size-[50px] items-center justify-center rounded-full bg-base-200 text-base-content/60">
+              <button type="button" onClick={() => setArchived(true)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-base-content/[0.04]">
+                <span className="flex size-12 items-center justify-center text-base-content/60">
                   <Archive className="size-5" />
                 </span>
                 <span className="flex-1 text-[0.95rem] font-medium">Archived</span>
-                <span className="mr-1 text-sm text-base-content/50">{archivedCount}</span>
+                <span className="text-[0.8125rem] font-medium text-base-content/50">{archivedCount}</span>
               </button>
             )}
 
+            {q && list.length > 0 && <SectionLabel>Chats</SectionLabel>}
             {list.map((conv, i) => (
               <ConversationItem
                 key={conv._id}
@@ -233,11 +283,11 @@ export default function ConversationList() {
             ))}
 
             {q && people.length > 0 && (
-              <div className="mt-3">
-                <div className="section-title px-3">People</div>
+              <>
+                <SectionLabel>People</SectionLabel>
                 {people.map((u) => (
-                  <button key={u._id} type="button" onClick={() => startChat(u)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition hover:bg-base-content/[0.04]">
-                    <Avatar src={u.profilePic} name={u.fullName} seed={u._id} size={44} online={u.online} />
+                  <button key={u._id} type="button" onClick={() => startChat(u)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-base-content/[0.04]">
+                    <Avatar src={u.profilePic} name={u.fullName} seed={u._id} size={48} online={u.online} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{u.fullName}</span>
                       <span className="block truncate text-[0.8125rem] text-base-content/55">{u.about || u.emailHint}</span>
@@ -245,22 +295,55 @@ export default function ConversationList() {
                     <MessageSquarePlus className="size-5 text-base-content/40" />
                   </button>
                 ))}
-              </div>
+              </>
             )}
 
-            {list.length === 0 && (!q || people.length === 0) && (
-              <EmptyList filter={filter} query={q} archived={archived} error={loadError} empty={all.length === 0} />
+            {q && found?.length > 0 && (
+              <>
+                <SectionLabel>Messages</SectionLabel>
+                {found.map((m) => {
+                  const conv = conversations[m.conversation];
+                  if (!conv) return null;
+                  const title = conversationTitle(conv, me._id);
+                  return (
+                    <button key={m._id} type="button" onClick={() => go(conv._id, m._id)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-base-content/[0.04]">
+                      <Avatar
+                        src={conv.type === "group" ? conv.avatar : peerOf(conv, me._id)?.profilePic}
+                        name={title}
+                        seed={conv.type === "group" ? conv._id : peerOf(conv, me._id)?._id}
+                        group={conv.type === "group"}
+                        self={conv.type === "self"}
+                        size={48}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline gap-2">
+                          <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
+                          <span className="shrink-0 text-xs text-base-content/45">{formatListTime(m.createdAt)}</span>
+                        </span>
+                        <span className="line-clamp-2 text-[0.8125rem] text-base-content/60">
+                          {conv.type === "group" && <span className="text-base-content/75">{nameIn(conv, m.sender)}: </span>}
+                          <Highlight text={m.text || previewText(m, { conv, meId: me._id })} query={query.trim()} />
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {list.length === 0 && (!q || (people.length === 0 && !found?.length)) && (
+              <EmptyList filter={filter} query={q} archived={archived} error={loadError} empty={all.length === 0} searching={q.length >= 2 && found === null} />
             )}
           </div>
         )}
       </div>
 
       {/* Phones: thumb-reachable new chat button */}
-      {!wide && (
+      {!wide && !archived && (
         <button
           type="button"
           onClick={() => useUIStore.getState().open("newChatOpen")}
-          className="absolute bottom-4 right-4 z-10 flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-content shadow-float transition active:scale-95 md:hidden"
+          className="anim-pop absolute bottom-4 right-4 z-10 flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-content shadow-float transition active:scale-95 md:hidden"
           aria-label="New chat"
         >
           <MessageSquarePlus className="size-6" />
@@ -274,29 +357,40 @@ export default function ConversationList() {
         onClose={() => setHeaderMenu(null)}
         items={[
           { key: "group", label: "New group", icon: Users, onSelect: () => useUIStore.getState().open("newGroupOpen") },
+          { key: "saved", label: "Saved messages", icon: Bookmark, onSelect: openSaved },
+          { key: "starred", label: "Starred messages", icon: Star, onSelect: () => navigate("/starred", { viewTransition: true }) },
           { key: "archived", label: `Archived chats${archivedCount ? ` (${archivedCount})` : ""}`, icon: Archive, onSelect: () => setArchived(true) },
           { key: "readall", label: "Mark all as read", icon: CheckCheck, disabled: !counts.unread, onSelect: markAllRead },
+          "divider",
+          lockable && { key: "lock", label: "Lock app now", icon: Lock, onSelect: () => useLockStore.getState().lockNow() },
+          { key: "settings", label: "Settings", icon: Settings, onSelect: () => navigate("/settings", { viewTransition: true }) },
         ]}
       />
     </div>
   );
 }
 
-function EmptyList({ filter, query, archived, error, empty }) {
+function EmptyList({ filter, query, archived, error, empty, searching }) {
   let title = "No chats yet";
   let body = "Start a conversation with anyone on BlinkChat.";
   if (error) {
     title = "Couldn't load chats";
     body = error;
+  } else if (searching) {
+    title = "Searching…";
+    body = "";
   } else if (query) {
     title = "No results";
-    body = "Try a different name, or search by email.";
+    body = "Try a different name or word, or search by email.";
   } else if (archived) {
     title = "No archived chats";
     body = "Archive chats to keep your list tidy. They come back when new messages arrive.";
   } else if (!empty && filter === "unread") {
     title = "You're all caught up";
     body = "No unread messages.";
+  } else if (!empty && filter === "favorites") {
+    title = "No favorites yet";
+    body = "Long-press (or right-click) a chat and choose “Add to favorites” to find it here quickly.";
   } else if (!empty && filter === "reply") {
     title = "Nothing waiting on you";
     body = "Chats where someone is waiting for your reply will show up here.";
@@ -307,7 +401,7 @@ function EmptyList({ filter, query, archived, error, empty }) {
   return (
     <div className="anim-fade mx-auto flex max-w-xs flex-col items-center px-6 py-14 text-center">
       <h2 className="font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-base-content/55">{body}</p>
+      {body && <p className="mt-1 text-sm text-base-content/55">{body}</p>}
       {error ? (
         <button type="button" className="btn btn-sm mt-4 rounded-xl" onClick={() => useChatStore.getState().fetchConversations()}>
           Try again

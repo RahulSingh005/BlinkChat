@@ -7,6 +7,18 @@ import { clearSession, getRequestToken, verifyToken } from "../lib/tokens.js";
  * expired or revoked tokens now return 401 (previously a bad token threw
  * inside jwt.verify and surfaced as a 500).
  */
+/** Like protectRoute, but signed-out requests continue with req.user = null. */
+export const optionalAuth = async (req, res, next) => {
+  const decoded = verifyToken(getRequestToken(req));
+  req.user = null;
+  if (decoded) {
+    const user = await User.findById(decoded.userId);
+    if (user && (user.tokenVersion || 0) === decoded.version) req.user = user;
+    else clearSession(res);
+  }
+  next();
+};
+
 export const protectRoute = async (req, res, next) => {
   const decoded = verifyToken(getRequestToken(req));
   if (!decoded) return next(unauthorized());

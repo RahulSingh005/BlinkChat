@@ -6,7 +6,7 @@ import { callText, systemText } from "../../lib/preview";
 export const SystemRow = memo(function SystemRow({ message, conv, meId, cascade }) {
   return (
     <div data-mid={message._id} className={`flex justify-center px-4 py-1.5 ${cascade !== undefined ? "anim-cascade" : message.fresh ? "anim-fade" : ""}`} style={{ "--i": cascade }}>
-      <span className="max-w-[85%] rounded-full bg-base-100/90 px-3 py-1 text-center text-xs text-base-content/60 shadow-sm backdrop-blur">
+      <span className="max-w-[85%] rounded-xl bg-base-100/95 px-3 py-1 text-center text-xs leading-snug text-base-content/60 shadow-sm">
         {systemText(message, conv, meId)}
       </span>
     </div>
@@ -23,7 +23,7 @@ export const CallRow = memo(function CallRow({ message, meId, onCallBack, cascad
       <button
         type="button"
         onClick={() => onCallBack(message.call?.kind || "voice")}
-        className="flex items-center gap-2.5 rounded-2xl bg-base-100/95 px-3.5 py-2 text-left shadow-sm backdrop-blur transition hover:bg-base-100"
+        className="flex items-center gap-2.5 rounded-2xl bg-base-100/95 px-3.5 py-2 text-left shadow-sm transition hover:bg-base-100"
         title="Call back"
       >
         <span className={`flex size-8 items-center justify-center rounded-full ${missed ? "bg-error/10 text-error" : "bg-success/15 text-success"}`}>
@@ -41,7 +41,7 @@ export const CallRow = memo(function CallRow({ message, meId, onCallBack, cascad
 export function DateDivider({ label }) {
   return (
     <div className="pointer-events-none flex justify-center py-2" data-day={label}>
-      <span className="rounded-full bg-base-100/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-base-content/55 shadow-sm backdrop-blur">
+      <span className="rounded-lg bg-base-100/95 px-2.5 py-1 text-xs font-medium text-base-content/60 shadow-sm">
         {label}
       </span>
     </div>
@@ -62,10 +62,10 @@ export function UnreadDivider({ count }) {
 
 export function TypingBubble({ names, isGroup }) {
   return (
-    <div className="anim-in-left mt-2 flex items-end gap-2 px-2 md:px-4">
+    <div className="anim-in-left mt-2 flex items-end gap-2">
       {isGroup && <div className="w-8 shrink-0" />}
       <div className="flex items-center gap-2">
-        <span className="flex h-9 items-center gap-1 rounded-[18px] rounded-bl-[6px] border border-bubble-in-border/70 bg-bubble-in px-3.5 shadow-bubble">
+        <span className="flex h-9 items-center gap-1 rounded-[18px] rounded-bl-[6px] bg-bubble-in px-3.5 shadow-bubble">
           <span className="typing-dot" />
           <span className="typing-dot" style={{ animationDelay: "0.15s" }} />
           <span className="typing-dot" style={{ animationDelay: "0.3s" }} />

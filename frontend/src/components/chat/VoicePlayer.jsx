@@ -72,8 +72,8 @@ function VoicePlayer({ att, mine }) {
     if (audioRef.current) audioRef.current.playbackRate = next;
   };
 
-  const played = mine ? "bg-primary-content" : "bg-primary";
-  const rest = mine ? "bg-primary-content/35" : "bg-base-content/20";
+  const played = mine ? "bg-bubble-out-content" : "bg-primary";
+  const rest = mine ? "bg-bubble-out-content/35" : "bg-base-content/20";
 
   return (
     <div className="flex w-[min(68vw,260px)] items-center gap-2.5 py-0.5">
@@ -81,7 +81,7 @@ function VoicePlayer({ att, mine }) {
         type="button"
         onClick={toggle}
         className={`flex size-10 shrink-0 items-center justify-center rounded-full transition active:scale-95 ${
-          mine ? "bg-primary-content/20 text-primary-content" : "bg-primary text-primary-content"
+          mine ? "bg-bubble-out-content/20 text-bubble-out-content" : "bg-primary text-primary-content"
         }`}
         aria-label={playing ? "Pause" : "Play voice message"}
       >
@@ -97,10 +97,10 @@ function VoicePlayer({ att, mine }) {
             />
           ))}
         </div>
-        <div className={`mt-0.5 flex items-center justify-between text-[11px] tabular-nums ${mine ? "text-primary-content/75" : "text-base-content/50"}`}>
+        <div className={`mt-0.5 flex items-center justify-between text-[11px] tabular-nums ${mine ? "text-bubble-out-content/75" : "text-base-content/50"}`}>
           <span>{formatDuration(playing || elapsed ? elapsed : duration)}</span>
           {(playing || speed !== 1) && (
-            <button type="button" onClick={cycleSpeed} className={`rounded-full px-1.5 font-semibold ${mine ? "bg-primary-content/20" : "bg-base-content/10"}`}>
+            <button type="button" onClick={cycleSpeed} className={`rounded-full px-1.5 font-semibold ${mine ? "bg-bubble-out-content/20" : "bg-base-content/10"}`}>
               {speed}×
             </button>
           )}

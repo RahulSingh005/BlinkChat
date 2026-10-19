@@ -94,6 +94,11 @@ export const env = {
   TURN_USERNAME: str(process.env.TURN_USERNAME),
   TURN_CREDENTIAL: str(process.env.TURN_CREDENTIAL),
 
+  // GIFs & stickers (free key from https://partner.klipy.com). Optional.
+  KLIPY_API_KEY: str(process.env.KLIPY_API_KEY),
+  // Link previews for URLs in messages (fetched server-side). On by default.
+  LINK_PREVIEWS: bool(process.env.LINK_PREVIEWS, true),
+
   // Serve the built frontend (frontend/dist) from this server. Defaults to
   // on in production when the build exists.
   SERVE_FRONTEND: str(process.env.SERVE_FRONTEND),
@@ -103,6 +108,7 @@ export const features = {
   cloudinary: Boolean(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET),
   email: Boolean(env.EMAIL_USER && env.EMAIL_PASS),
   google: Boolean(env.GOOGLE_CLIENT_ID),
+  gifs: Boolean(env.KLIPY_API_KEY),
 };
 
 export function validateEnv() {

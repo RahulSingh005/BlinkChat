@@ -52,6 +52,27 @@ export const uploadLimiter = make({
   message: "Too many uploads. Please wait a bit.",
 });
 
+export const gifLimiter = make({
+  windowMs: MINUTE,
+  limit: 90,
+  perUser: true,
+  message: "Slow down a little, too many GIF searches.",
+});
+
+export const inviteLimiter = make({
+  windowMs: 10 * MINUTE,
+  limit: 40,
+  perUser: true,
+  message: "Too many invite link attempts. Please wait a few minutes.",
+});
+
+export const storyLimiter = make({
+  windowMs: 60 * MINUTE,
+  limit: 40,
+  perUser: true,
+  message: "You're posting status updates too quickly.",
+});
+
 export const aiLimiter = make({
   windowMs: 5 * MINUTE,
   limit: 40,

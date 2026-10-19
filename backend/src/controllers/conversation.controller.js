@@ -4,7 +4,8 @@ import ScheduledMessage from "../models/scheduledMessage.model.js";
 import User from "../models/user.model.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { emitToUser, emitToUsers } from "../lib/realtime.js";
-import { hasBlocked, serializeMessage } from "../lib/serializers.js";
+import crypto from "node:crypto";
+import { hasBlocked, messagePreview, serializeMessage } from "../lib/serializers.js";
 import { deleteImageByUrl, isTrustedMediaUrl } from "../lib/storage.js";
 import { escapeRegex, idStr, sameId, toObjectId, uniqueIds } from "../lib/utils.js";
 import {
@@ -13,6 +14,7 @@ import {
   broadcastConversation,
   buildConversation,
   findOrCreateDirect,
+  findOrCreateSelf,
   getConversationForMember,
   getMember,
   invalidateMembership,
@@ -23,6 +25,7 @@ import { assertCanSend, createMessage, postSystemMessage, validateAttachments } 
 import { removeMemberFromGroup } from "../services/group.service.js";
 
 const MAX_PINNED = 5;
+const MAX_PINNED_MESSAGES = 3;
 const FOREVER = new Date("9999-12-31T00:00:00Z");
 const MAX_SCHEDULE_AHEAD_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -36,6 +39,12 @@ export const listConversations = async (req, res) => {
 
 export const getConversation = async (req, res) => {
   const conv = await getConversationForMember(req.params.id, req.user._id, { lean: true });
+  res.json({ conversation: await buildConversation(conv, req.user) });
+};
+
+/** "Saved Messages": notes-to-self chat, created on first open. */
+export const openSelf = async (req, res) => {
+  const conv = await findOrCreateSelf(req.user);
   res.json({ conversation: await buildConversation(conv, req.user) });
 };
 
@@ -182,7 +191,14 @@ export const markRead = async (req, res) => {
   const at = new Date();
   await Conversation.updateOne(
     { _id: conv._id, "members.user": me._id },
-    { $set: { "members.$.lastReadAt": at, "members.$.lastDeliveredAt": at, "members.$.unreadCount": 0 } }
+    {
+      $set: {
+        "members.$.lastReadAt": at,
+        "members.$.lastDeliveredAt": at,
+        "members.$.unreadCount": 0,
+        "members.$.mentionCount": 0,
+      },
+    }
   );
 
   const conversationId = idStr(conv._id);
@@ -208,7 +224,7 @@ export const markRead = async (req, res) => {
 export const updateMySettings = async (req, res) => {
   const me = req.user;
   const conv = await getConversationForMember(req.params.id, me._id, { lean: true });
-  const { muteFor, pinned, archived } = req.data;
+  const { muteFor, pinned, archived, favorite } = req.data;
   const $set = {};
 
   if (muteFor !== undefined) {
@@ -224,6 +240,7 @@ export const updateMySettings = async (req, res) => {
     $set["members.$.pinnedAt"] = pinned ? new Date() : null;
   }
   if (archived !== undefined) $set["members.$.archived"] = archived;
+  if (favorite !== undefined) $set["members.$.favorite"] = favorite;
   if (!Object.keys($set).length) throw badRequest("Nothing to update");
 
   await Conversation.updateOne({ _id: conv._id, "members.user": me._id }, { $set });
@@ -253,7 +270,14 @@ export const clearChat = async (req, res) => {
   const at = new Date();
   await Conversation.updateOne(
     { _id: conv._id, "members.user": req.user._id },
-    { $set: { "members.$.clearedAt": at, "members.$.lastReadAt": at, "members.$.unreadCount": 0 } }
+    {
+      $set: {
+        "members.$.clearedAt": at,
+        "members.$.lastReadAt": at,
+        "members.$.unreadCount": 0,
+        "members.$.mentionCount": 0,
+      },
+    }
   );
   emitToUser(req.user._id, "conversation:cleared", { conversationId: idStr(conv._id), at });
   res.json({ clearedAt: at });
@@ -273,6 +297,7 @@ export const deleteChat = async (req, res) => {
           "members.$.clearedAt": at,
           "members.$.lastReadAt": at,
           "members.$.unreadCount": 0,
+          "members.$.mentionCount": 0,
           "members.$.hidden": true,
           "members.$.pinnedAt": null,
         },
@@ -343,7 +368,7 @@ export const getMessages = async (req, res) => {
     messages = page.slice(0, limit).reverse();
   }
 
-  res.json({ messages: messages.map(serializeMessage), hasMore, hasNewer });
+  res.json({ messages: messages.map((m) => serializeMessage(m, req.user._id)), hasMore, hasNewer });
 };
 
 export const searchMessages = async (req, res) => {
@@ -358,7 +383,7 @@ export const searchMessages = async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
-  res.json({ messages: results.map(serializeMessage) });
+  res.json({ messages: results.map((m) => serializeMessage(m, req.user._id)) });
 };
 
 export const getMedia = async (req, res) => {
@@ -371,25 +396,161 @@ export const getMedia = async (req, res) => {
     if (ref) Object.assign(filter, cursorClause(ref, "older"));
   }
   const page = await Message.find(filter).sort({ createdAt: -1, _id: -1 }).limit(limit + 1).lean();
-  res.json({ messages: page.slice(0, limit).map(serializeMessage), hasMore: page.length > limit });
+  res.json({ messages: page.slice(0, limit).map((m) => serializeMessage(m, req.user._id)), hasMore: page.length > limit });
 };
+
+async function contactCardFor(viewer, userId) {
+  const user = await User.findById(userId).select("fullName profilePic blockedUsers").lean();
+  if (!user) throw notFound("That contact no longer exists");
+  if (hasBlocked(user, viewer._id)) throw badRequest("You can't share this contact");
+  return { user: user._id, name: user.fullName, avatar: user.profilePic || "" };
+}
 
 export const sendMessage = async (req, res) => {
   const conv = await getConversationForMember(req.params.id, req.user._id);
   await assertCanSend(conv, req.user._id);
-  const { text, replyTo, urgent, clientId } = req.data;
+  const { text, replyTo, urgent, clientId, poll, location, contactUserId, mentions, viewOnce } = req.data;
   const attachments = validateAttachments(req.data.attachments);
+  if (viewOnce && conv.type === "self") throw badRequest("View once isn't available in Saved Messages");
 
   const { message, duplicate } = await createMessage({
     conversation: conv,
     senderId: req.user._id,
-    text,
-    attachments,
+    text: poll || location || contactUserId ? "" : text,
+    attachments: poll || location || contactUserId ? [] : attachments,
     replyTo,
     urgent,
     clientId,
+    poll: poll
+      ? {
+          question: poll.question,
+          multiple: poll.multiple,
+          options: poll.options.map((option, i) => ({ id: String(i + 1), text: option, voters: [] })),
+        }
+      : null,
+    location: location || null,
+    contactCard: contactUserId ? await contactCardFor(req.user, contactUserId) : null,
+    mentions,
+    viewOnce,
   });
-  res.status(duplicate ? 200 : 201).json({ message: serializeMessage(message) });
+  res.status(duplicate ? 200 : 201).json({ message: serializeMessage(message, req.user._id) });
+};
+
+// ---- Pinned messages -----------------------------------------------------------
+
+/** Group admins (or either person in a 1:1 chat) can pin up to 3 messages. */
+async function assertCanPin(conv, userId) {
+  if (conv.type === "group") assertGroupAdmin(conv, userId);
+  else await assertCanSend(conv, userId);
+}
+
+export const pinMessage = async (req, res) => {
+  const conv = await getConversationForMember(req.params.id, req.user._id);
+  await assertCanPin(conv, req.user._id);
+  const message = await Message.findOne({
+    _id: req.data.messageId,
+    conversation: conv._id,
+    type: "user",
+    deletedAt: null,
+    hiddenFor: { $ne: toObjectId(req.user._id) },
+  }).lean();
+  if (!message) throw notFound("Message not found");
+  if (message.viewOnce) throw badRequest("View once messages can't be pinned");
+
+  if (!conv.pinned.some((p) => sameId(p.message, message._id))) {
+    // Newest first; pinning a 4th message replaces the oldest (WhatsApp).
+    conv.pinned = [{ message: message._id, by: req.user._id, at: new Date() }, ...conv.pinned].slice(0, MAX_PINNED_MESSAGES);
+    await conv.save();
+    if (conv.type !== "self") {
+      await postSystemMessage(conv, req.user._id, "message_pinned", {
+        data: { messageId: idStr(message._id), preview: messagePreview(message) },
+      });
+    }
+    await broadcastConversation(conv);
+  }
+  res.json({ conversation: await buildConversation(conv, req.user) });
+};
+
+export const unpinMessage = async (req, res) => {
+  const conv = await getConversationForMember(req.params.id, req.user._id);
+  await assertCanPin(conv, req.user._id);
+  if (conv.pinned.some((p) => sameId(p.message, req.params.messageId))) {
+    conv.pinned = conv.pinned.filter((p) => !sameId(p.message, req.params.messageId));
+    await conv.save();
+    await broadcastConversation(conv);
+  }
+  res.json({ conversation: await buildConversation(conv, req.user) });
+};
+
+// ---- Invite links --------------------------------------------------------------
+
+const newInviteCode = () => crypto.randomBytes(12).toString("base64url");
+
+/** Creates (or resets, invalidating the old link) the group invite link. */
+export const createInvite = async (req, res) => {
+  const conv = await getConversationForMember(req.params.id, req.user._id);
+  assertGroupAdmin(conv, req.user._id);
+  conv.inviteCode = newInviteCode();
+  await conv.save();
+  await broadcastConversation(conv);
+  res.json({ inviteCode: conv.inviteCode });
+};
+
+export const revokeInvite = async (req, res) => {
+  const conv = await getConversationForMember(req.params.id, req.user._id);
+  assertGroupAdmin(conv, req.user._id);
+  conv.inviteCode = undefined;
+  await conv.save();
+  await broadcastConversation(conv);
+  res.json({ inviteCode: null });
+};
+
+// ---- Export ------------------------------------------------------------------------
+
+const exportLine = (m, names, fmt) => {
+  const who = names.get(idStr(m.sender)) || "Deleted account";
+  const when = fmt.format(new Date(m.createdAt));
+  if (m.type === "system") return `[${when}] — ${m.system?.event?.replace(/_/g, " ") || "update"}`;
+  if (m.deletedAt) return `[${when}] ${who}: <This message was deleted>`;
+  const parts = [];
+  if (m.text) parts.push(m.text);
+  if (m.poll) parts.push(`POLL: ${m.poll.question}\n${m.poll.options.map((o) => `  • ${o.text} (${o.voters?.length || 0})`).join("\n")}`);
+  if (m.location) parts.push(`Location: https://www.openstreetmap.org/?mlat=${m.location.lat}&mlon=${m.location.lng}#map=16/${m.location.lat}/${m.location.lng}`);
+  if (m.contactCard) parts.push(`Contact: ${m.contactCard.name}`);
+  for (const a of m.attachments || []) parts.push(`<${m.viewOnce ? "view once " : ""}${a.kind}${a.name ? `: ${a.name}` : ""}>`);
+  if (m.type === "call") parts.push(messagePreview(m));
+  return `[${when}] ${who}: ${parts.join(" ") || messagePreview(m)}`;
+};
+
+/** Plain-text export of the history I can see (like WhatsApp's "Export chat"). */
+export const exportChat = async (req, res) => {
+  const conv = await getConversationForMember(req.params.id, req.user._id, { lean: true });
+  const filter = baseMessageFilter(conv, req.user._id);
+  const senders = await Message.distinct("sender", filter);
+  const users = await User.find({ _id: { $in: senders } }).select("fullName").lean();
+  const names = new Map(users.map((u) => [idStr(u._id), u.fullName]));
+
+  let timeZone = "UTC";
+  try {
+    timeZone = req.user.timezone || "UTC";
+    new Intl.DateTimeFormat("en-GB", { timeZone });
+  } catch {
+    timeZone = "UTC";
+  }
+  const fmt = new Intl.DateTimeFormat("en-GB", { timeZone, dateStyle: "short", timeStyle: "short" });
+
+  const title = conv.type === "group" ? conv.name : conv.type === "self" ? "Saved Messages" : "chat";
+  const safeName = String(title || "chat").replace(/[^\w\- ]+/g, "").trim().slice(0, 40) || "chat";
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="BlinkChat - ${safeName}.txt"`);
+  res.setHeader("Cache-Control", "no-store");
+  res.write(`BlinkChat export · ${title || "Chat"} · ${fmt.format(new Date())} (${timeZone})\n\n`);
+
+  const cursor = Message.find(filter).sort({ createdAt: 1, _id: 1 }).limit(50000).lean().cursor();
+  for await (const m of cursor) {
+    if (!res.write(`${exportLine(m, names, fmt)}\n`)) await new Promise((r) => res.once("drain", r));
+  }
+  res.end();
 };
 
 // ---- Scheduled messages ("Send later" / "their morning") -------------------
