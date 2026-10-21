@@ -18,5 +18,5 @@ export default function BootScreen() {
   }, []);
 
   if (stage === 0) return <div className="app-shell bg-base-200" aria-busy="true" />;
-  return <StatusScreen busy title="BlinkChat" body={stage === 2 ? "Waking up the server, this can take a few seconds…" : "Getting things ready"} />;
+  return <StatusScreen busy title="BlinkChat" body={stage === 2 ? "Taking a little longer than usual…" : "Getting things ready"} />;
 }

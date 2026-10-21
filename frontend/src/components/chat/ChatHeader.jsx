@@ -200,13 +200,15 @@ export default function ChatHeader({ conv }) {
             </span>
             <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs leading-tight text-base-content/55">
               {subtitle.parts ? (
-                subtitle.parts.map((p, i) => (
-                  <span key={p.text} className={`flex min-w-0 shrink items-center gap-1 truncate ${p.tone === "success" ? "font-medium text-success" : ""}`}>
-                    {i > 0 && <span className="text-base-content/30">·</span>}
-                    {p.icon && <p.icon className="size-3 shrink-0" />}
-                    <span className="truncate">{p.text}</span>
-                  </span>
-                ))
+                // One line that truncates as a whole (phones show the first part cleanly).
+                <span className="truncate">
+                  {subtitle.parts.map((p, i) => (
+                    <span key={p.text} className={p.tone === "success" ? "font-medium text-success" : ""}>
+                      {i > 0 && <span className="text-base-content/30"> · </span>}
+                      {p.text}
+                    </span>
+                  ))}
+                </span>
               ) : (
                 <span className={`truncate ${subtitle.tone === "primary" ? "font-medium text-primary" : ""}`}>{subtitle.text}</span>
               )}

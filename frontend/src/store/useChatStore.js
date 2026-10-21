@@ -204,7 +204,8 @@ export const useChatStore = create((set, get) => ({
 
   exportChat: async (conv) => {
     const res = await api.get(`/conversations/${conv._id}/export`, { responseType: "blob", timeout: 120000 });
-    const title = conversationTitle(conv).replace(/[^\w\- ]+/g, "").trim() || "chat";
+    // Keep letters from every language (e.g. "Sofía"), drop characters that are unsafe in file names.
+    const title = conversationTitle(conv).replace(/[^\p{L}\p{N}\- ]+/gu, "").trim() || "chat";
     saveBlob(res.data, `BlinkChat - ${title}.txt`);
   },
 

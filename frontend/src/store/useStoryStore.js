@@ -58,10 +58,18 @@ export const useStoryStore = create((set, get) => ({
   },
 
   react: async (storyId, emoji) => {
-    await api.post(`/stories/${storyId}/react`, { emoji });
-    set((s) => ({
-      others: s.others.map((g) => ({ ...g, stories: g.stories.map((st) => (st._id === storyId ? { ...st, myReaction: emoji } : st)) })),
-    }));
+    const setReaction = (value) =>
+      set((s) => ({
+        others: s.others.map((g) => ({ ...g, stories: g.stories.map((st) => (st._id === storyId ? { ...st, myReaction: value } : st)) })),
+      }));
+    const previous = get().others.flatMap((g) => g.stories).find((st) => st._id === storyId)?.myReaction || "";
+    setReaction(emoji); // show it right away
+    try {
+      await api.post(`/stories/${storyId}/react`, { emoji });
+    } catch (err) {
+      setReaction(previous);
+      throw err;
+    }
   },
 
   reply: async (storyId, text) => (await api.post(`/stories/${storyId}/reply`, { text })).data,

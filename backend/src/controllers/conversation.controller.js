@@ -540,9 +540,14 @@ export const exportChat = async (req, res) => {
   const fmt = new Intl.DateTimeFormat("en-GB", { timeZone, dateStyle: "short", timeStyle: "short" });
 
   const title = conv.type === "group" ? conv.name : conv.type === "self" ? "Saved Messages" : "chat";
-  const safeName = String(title || "chat").replace(/[^\w\- ]+/g, "").trim().slice(0, 40) || "chat";
+  // Unicode name for modern browsers (filename*), ASCII fallback for old ones.
+  const niceName = String(title || "chat").replace(/[^\p{L}\p{N}\- ]+/gu, "").trim().slice(0, 40) || "chat";
+  const asciiName = niceName.replace(/[^\w\- ]+/g, "").trim() || "chat";
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="BlinkChat - ${safeName}.txt"`);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="BlinkChat - ${asciiName}.txt"; filename*=UTF-8''${encodeURIComponent(`BlinkChat - ${niceName}.txt`)}`
+  );
   res.setHeader("Cache-Control", "no-store");
   res.write(`BlinkChat export · ${title || "Chat"} · ${fmt.format(new Date())} (${timeZone})\n\n`);
 

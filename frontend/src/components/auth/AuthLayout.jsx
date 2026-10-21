@@ -28,11 +28,11 @@ function ServerNotice() {
 export default function AuthLayout({ children }) {
   return (
     <div className="grid min-h-dvh bg-base-100 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-      <div className="safe-top flex min-w-0 flex-col px-5 pb-6 pt-6 sm:px-10">
+      <div className="safe-top flex min-h-dvh min-w-0 flex-col px-5 pb-6 pt-5 sm:px-10 sm:pt-6 lg:min-h-0">
         <Link to="/" className="w-fit" aria-label="BlinkChat home">
-          <Logo size={34} />
+          <Logo size={32} />
         </Link>
-        <div className="flex flex-1 items-center justify-center py-10">
+        <div className="flex flex-1 items-start justify-center pb-8 pt-10 sm:items-center sm:py-10">
           <div className="anim-slide-up w-full max-w-sm">
             <ServerNotice />
             {children}

@@ -21,10 +21,18 @@
     }
   }
 
+  /* One type scale for everything (inputs included); phones get a slightly
+     larger base so small labels stay readable. */
   html[data-font="sm"] { font-size: 14px; }
   html[data-font="md"] { font-size: 15px; }
   html[data-font="lg"] { font-size: 16.5px; }
   html[data-font="xl"] { font-size: 18px; }
+  @media (max-width: 767px) {
+    html[data-font="sm"] { font-size: 15px; }
+    html[data-font="md"] { font-size: 16px; }
+    html[data-font="lg"] { font-size: 17.5px; }
+    html[data-font="xl"] { font-size: 19px; }
+  }
 
   /* Chat surfaces. Outgoing bubbles (--bo/--boc) follow the accent color
      and are set from JS (useSettingsStore) for each theme. */
@@ -93,14 +101,8 @@
     touch-action: manipulation; /* no 300ms tap delay */
   }
 
-  /* iOS Safari zooms the page when a focused field's font is < 16px. */
-  @media (pointer: coarse) {
-    input,
-    textarea,
-    select {
-      font-size: max(16px, 1em) !important;
-    }
-  }
+  /* iOS zoom-on-focus is prevented in theme-init.js (viewport), so inputs
+     keep the same size as the text around them. */
 
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -247,7 +249,7 @@
 .msg-text a {
   text-decoration: underline;
   text-underline-offset: 2px;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .msg-text code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

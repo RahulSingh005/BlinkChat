@@ -1,78 +1,173 @@
+<div align="center">
+
+<img src="frontend/public/favicon.svg" width="72" alt="BlinkChat logo" />
+
 # BlinkChat
 
-A fast, mobile-first messenger built with MongoDB, Express, React and Socket.IO.
+**A fast, modern messenger for the web: real-time chats, groups, calls, status updates and smart scheduling.**
 
-**Core:** direct & group chats (up to 256), delivered/read receipts, typing indicators, presence & last seen, replies, reactions, edit, delete for me/everyone, forward, search, photos/videos/files, voice notes, voice & video calls (multi-device ringing, screen share), disappearing messages, mute/pin/archive, blocking, Web Push notifications, installable PWA, offline outbox, light/dark/system themes with accent colors and solid/soft bubbles.
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520.19-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose%208-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com)
+[![Socket.IO](https://img.shields.io/badge/Socket.IO-4-010101?logo=socket.io&logoColor=white)](https://socket.io)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](#license)
 
-**Modern messenger features:** status updates (24h stories with views, reactions and replies) · GIFs & stickers · polls · location sharing (OpenStreetMap preview) · contact cards · @mentions (notify even in muted groups) · pinned messages · starred messages · Saved Messages (chat with yourself) · view-once photos/videos · link previews · group invite links with QR codes · profile QR code · Calls tab with history · global message search · Favorites filter · chat export (.txt) · app lock with PIN.
+[Features](#features) · [Tech stack](#tech-stack) · [Getting started](#getting-started) · [Configuration](#configuration) · [Deployment](#deployment) · [Security](#security)
 
-**Extras most messengers don't have:** contact's local time in the header · "send at their morning" (time-zone-aware scheduling) · scheduled messages · "Remind me" on any message · Needs-reply filter · Focus mode with urgent override · optional AI: catch-up summaries, reply suggestions, rewrite, translate, voice-note transcription.
+</div>
 
-## Quick start (no accounts needed)
+---
 
-Requires Node.js 20.19+.
+## Overview
+
+BlinkChat is a full-stack, mobile-first messaging application built on the MERN stack with Socket.IO. It covers everything people expect from a modern messenger and adds features that address real friction in everyday conversations: time zones, busy schedules and noisy group chats.
+
+It installs as a Progressive Web App on desktop and mobile, works on unreliable networks with an offline outbox, and runs entirely on free tiers of well-known services.
+
+## Features
+
+### Messaging
+- One-to-one and group chats (up to 256 members) with admin roles and invite links with QR codes
+- Delivered and read receipts, typing indicators, online presence and last seen
+- Replies, reactions, editing, forwarding, and delete for me or for everyone
+- Photos, videos, documents and voice notes with live waveforms
+- GIFs and stickers, polls, location sharing, contact cards and link previews
+- @mentions that notify even in muted groups
+- Pinned, starred and view-once messages, plus Saved Messages for personal notes
+- Disappearing messages, global message search and chat export
+
+### Calls and status
+- Peer-to-peer voice and video calls with multi-device ringing and screen sharing
+- Call history with missed-call tracking
+- Status updates that disappear after 24 hours, with views, reactions and replies
+
+### Productivity
+- Scheduled messages, including **"send at their morning"** in the recipient's time zone
+- The contact's local time in the chat header
+- **Remind me** on any message
+- A "Needs reply" inbox and Focus mode with urgent override
+- Optional AI features: catch-up summaries, reply suggestions, rewriting, translation and voice-note transcription
+
+### Experience
+- Responsive layout for phones, tablets and desktops, with native-feeling transitions
+- Light, dark and system themes, seven accent colors, solid or soft bubbles and chat wallpapers
+- Web Push notifications, an installable PWA, app lock with PIN, and an offline message outbox
+
+## Tech stack
+
+| Layer | Technologies |
+|---|---|
+| Frontend | React 19, React Router 7, Zustand, Tailwind CSS, DaisyUI, Vite |
+| Backend | Node.js, Express 5, Socket.IO 4, Mongoose, Zod |
+| Database | MongoDB (Atlas or self-hosted) |
+| Real-time | Socket.IO with JWT-authenticated connections, WebRTC for calls |
+| Integrations | Cloudinary (media), Web Push (VAPID), Groq / Gemini (AI), KLIPY (GIFs), Metered or Cloudflare (TURN) |
+| Testing | Node.js test runner, Supertest, mongodb-memory-server |
+
+## Architecture
+
+```
+┌──────────────────────────┐        HTTPS (REST)        ┌──────────────────────────┐
+│  React SPA / PWA         │ ─────────────────────────▶ │  Express API             │
+│  Zustand stores          │                            │  Zod validation          │
+│  Service worker (push)   │ ◀───── WebSocket ────────▶ │  Socket.IO (realtime)    │
+└──────────────────────────┘                            │  Scheduler (jobs)        │
+            │                                           └────────────┬─────────────┘
+            │  WebRTC (peer-to-peer media, TURN relay)               │
+            ▼                                                        ▼
+      Other participant                                  MongoDB · Cloudinary · Web Push
+```
+
+The backend can serve the built frontend from the same domain (recommended), or the frontend can be hosted separately, for example on Vercel.
+
+## Getting started
+
+### Prerequisites
+- Node.js 20.19 or later (22 LTS recommended)
+- npm 10 or later
+
+### Installation
 
 ```bash
+git clone https://github.com/RahulSingh005/BlinkChat.git
+cd BlinkChat
 npm install --prefix backend
 npm install --prefix frontend
+```
+
+### Run locally
+
+Start the API with a local MongoDB instance. It is downloaded automatically, and data is kept in `backend/.data`:
+
+```bash
 npm --prefix backend run dev:memory
 ```
 
-`dev:memory` starts a real local MongoDB (downloaded once, data kept in `backend/.data`). In a second terminal:
+In a second terminal, start the web app:
 
 ```bash
 npm --prefix frontend run dev
 ```
 
-Open http://localhost:5173. Optional demo data (password `demo1234`, e.g. `ava@demo.blinkchat.app`):
+Open http://localhost:5173. No accounts or keys are required for local development.
+
+### Demo data (optional)
+
+Seed sample users and conversations (password `demo1234`, e.g. `ava@demo.blinkchat.app`):
 
 ```bash
-MONGODB_URI=mongodb://127.0.0.1:27027/blinkchat JWT_SECRET=x npm --prefix backend run seed
+MONGODB_URI=mongodb://127.0.0.1:27027/blinkchat JWT_SECRET=dev npm --prefix backend run seed
 ```
 
-Run the backend tests: `npm --prefix backend test`
+## Project structure
 
-## Configuration (`backend/.env`)
+```
+BlinkChat/
+├── backend/
+│   ├── src/
+│   │   ├── config/        # Environment loading and validation
+│   │   ├── controllers/   # Route handlers
+│   │   ├── lib/           # Realtime, storage, push, AI, link previews, scheduler
+│   │   ├── middleware/    # Auth, rate limiting, validation, errors
+│   │   ├── models/        # Mongoose schemas
+│   │   ├── routes/        # REST endpoints
+│   │   ├── services/      # Conversation and message domain logic
+│   │   ├── socket/        # Socket.IO handlers and call signaling
+│   │   └── migrations/    # Automatic data migrations
+│   └── test/              # API and realtime integration tests
+└── frontend/
+    ├── public/            # PWA manifest, service worker, icons
+    └── src/
+        ├── components/    # Chat, layout, stories, calls and UI primitives
+        ├── pages/         # Route screens
+        ├── store/         # Zustand state and realtime bindings
+        ├── hooks/         # Shared React hooks
+        └── lib/           # API client, formatting, media and theme helpers
+```
 
-Copy `backend/.env.example` to `backend/.env`. Only two values are required:
+## Scripts
 
-| Variable | How to get it (free) |
+| Command | Description |
 |---|---|
-| `MONGODB_URI` | [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) → create a free M0 cluster → Database Access (add user) → Network Access (allow `0.0.0.0/0` for hosted servers) → Connect → Drivers → copy the URI and add `/blinkchat` before `?` |
-| `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
+| `npm run build` | Install dependencies and build the frontend (production) |
+| `npm start` | Start the production server |
+| `npm test` | Run the backend test suite |
+| `npm --prefix backend run dev:memory` | Run the API with a local MongoDB |
+| `npm --prefix frontend run dev` | Run the web app with hot reload |
+| `npm --prefix frontend run lint` | Lint the frontend |
+| `npm --prefix backend run vapid` | Generate Web Push keys |
+| `npm --prefix backend run migrate` | Run data migrations manually |
 
-Everything else is optional and switches features on:
+## Security
 
-| Feature | Variables | Free source |
-|---|---|---|
-| Media storage (recommended in production) | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | [cloudinary.com](https://cloudinary.com) → Dashboard. Without it files go to `backend/uploads` (lost on hosts with temporary disks such as Render). |
-| Google sign-in | `GOOGLE_CLIENT_ID` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → Create OAuth client ID (Web) → add your site URL (and `http://localhost:5173`) to **Authorized JavaScript origins**. Set the consent screen's privacy policy to `https://YOUR-SITE/privacy`. No frontend variable needed — it's served at runtime. |
-| Password reset emails | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM` | Gmail: turn on 2-step verification → [App passwords](https://myaccount.google.com/apppasswords) → use it as `EMAIL_PASS`. Or [Brevo](https://www.brevo.com) SMTP (300/day). In development, codes are printed to the server console. |
-| Push notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | `npm --prefix backend run vapid` and paste both keys. (Auto-generated locally if empty; set them in production so subscriptions survive redeploys.) iPhone users must add the site to the Home Screen first. |
-| AI features | `GROQ_API_KEY` (recommended) or `GEMINI_API_KEY` | [Groq](https://console.groq.com/keys) — free, also enables voice-note transcription. [Google AI Studio](https://aistudio.google.com/apikey) — free. Optional overrides: `AI_PROVIDER`, `AI_MODEL`, `AI_BASE_URL`; `ANTHROPIC_API_KEY` for Claude (paid). `AI_DAILY_LIMIT_PER_USER` protects your free quota. |
-| GIFs & stickers | `KLIPY_API_KEY` | [KLIPY Partner Panel](https://partner.klipy.com) → create an app → copy the API key (free; Tenor's API closed in June 2026). Without it the GIF/Stickers tabs are hidden. Free keys allow ~100 requests/hour until you request production access; results are cached on the server. |
-| Link previews | `LINK_PREVIEWS` | On by default (`false` to disable). Pages are fetched by the server with private-network protection. |
-| Map tiles (location messages) | `VITE_MAP_TILES` (frontend, optional) | Defaults to OpenStreetMap tiles (fine for small apps). For heavy traffic use a free tile key, e.g. [MapTiler](https://www.maptiler.com) `https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=YOUR_KEY`. |
-| Reliable calls (TURN relay) | `METERED_DOMAIN`, `METERED_API_KEY` | [Metered](https://www.metered.ca/tools/openrelay/) free plan (20 GB/month): sign up → your app domain (e.g. `yourapp.metered.live`) + API key. Alternatives: Cloudflare TURN (`CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN`) or your own coturn (`TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL`). Without TURN, calls fail on many mobile networks. |
+- JWT sessions in httpOnly cookies, with bearer tokens for cross-site frontends and server-side revocation
+- Authenticated WebSocket connections with origin checks to prevent cross-site hijacking
+- Rate limiting, request validation with Zod, CSRF header checks and a Helmet content security policy
+- Upload type allow-listing, server-signed GIF URLs and SSRF-protected link previews
+- Privacy controls for last seen, read receipts and local time, plus blocking
 
-## Deploy (recommended: one free service on Render)
+Messages are encrypted in transit (HTTPS/WSS) and stored on the server to support multiple devices. They are **not** end-to-end encrypted.
 
-1. Push the repo to GitHub.
-2. [Render](https://render.com) → New → **Web Service** → pick the repo.
-3. Build command: `npm run build` · Start command: `npm start`
-4. Environment: `NODE_ENV=production` plus the variables above.
-5. Deploy. The backend serves the built frontend on the same domain, so cookies, WebSockets and iOS Safari all work with no CORS setup.
+## License
 
-Free Render services sleep after 15 minutes idle; scheduled messages and reminders run when it wakes. Add a free monitor on [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com) hitting `https://YOUR-SITE/api/health` every 10 minutes.
-
-### Frontend on Vercel instead (optional)
-
-Deploy the backend as above. On Vercel set root directory `frontend` and `VITE_API_URL=https://YOUR-BACKEND.onrender.com`. On the backend set `CLIENT_URL=https://YOUR-APP.vercel.app` and `COOKIE_SAMESITE=none`. The app automatically uses bearer tokens across domains, so Safari's third-party cookie blocking doesn't break login.
-
-## Upgrading from v1
-
-Existing data is migrated automatically on first start: v1 messages become conversations, emails are normalized and the old reset fields are removed. Nothing is deleted.
-
-## Security notes
-
-Messages are encrypted in transit (HTTPS/WSS) and stored on the server; they are **not** end-to-end encrypted. Included: authenticated sockets with origin checks, rate limits, OTP attempt limits, request validation, session revocation, CSRF header check, Helmet/CSP, and upload type allow-listing.
+Distributed under the ISC License.

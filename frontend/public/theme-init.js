@@ -2,6 +2,16 @@
 // flash of the wrong theme. Kept tiny and dependency-free; mirrors
 // src/lib/theme.js (accentVars).
 (function () {
+  // iPhone/iPad zoom into any focused field under 16px. maximum-scale=1 stops
+  // that while iOS still allows pinch-to-zoom (Android keeps full zoom).
+  try {
+    var ua = navigator.userAgent;
+    var iOS = /iPad|iPhone|iPod/.test(ua) || (ua.indexOf("Mac") > -1 && "ontouchend" in document);
+    var vp = iOS && document.querySelector('meta[name="viewport"]');
+    if (vp && vp.content.indexOf("maximum-scale") === -1) vp.content += ", maximum-scale=1";
+  } catch (e) {
+    /* ignore */
+  }
   try {
     var raw = localStorage.getItem("blinkchat.settings");
     var s = raw ? JSON.parse(raw) : {};
